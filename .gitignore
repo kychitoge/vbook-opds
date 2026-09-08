@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build & Cloudflare
+dist/
+.wrangler/
+.dev.vars
+
+# Decompiled APK & Raw Binaries (Giữ repo sạch, không commit APK bản quyền)
+decompiled/
+decompiled_ik9/
+decompiled_nq5/
+vbookapp.apk/
+*.apk
+*.dex
+
+# Environment & Secret
+.env
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
