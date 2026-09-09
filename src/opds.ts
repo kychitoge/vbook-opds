@@ -13,12 +13,24 @@ export function escapeXml(unsafe: string): string {
 }
 
 /**
- * Làm sạch tên sách bằng cách loại bỏ phần mở rộng file (.epub, .pdf, .cbz...)
- * Giữ nguyên 100% tính toàn vẹn của tên file (tập, phần, số chương...)
+ * Làm sạch và chuẩn hóa tên sách cho vBook:
+ * Giữ nguyên 100% tên file gốc kèm phần mở rộng (.epub, .pdf, .cbz...)
+ * vì bytecode vBook (j12.c, uya.a) trích xuất đuôi file từ thẻ <title>
+ * để tự động gán màu bìa sách SVG và hiển thị badge định dạng trên kệ sách.
+ * Cắt ngắn an toàn nếu tên file quá dài (> 255 ký tự) nhưng vẫn bảo toàn đuôi file.
  */
 export function cleanBookTitle(fileName: string): string {
-  const clean = fileName.replace(/\.[a-zA-Z0-9]+$/, '').trim();
-  return clean || fileName;
+  const trimmed = fileName.trim();
+  if (!trimmed) return fileName;
+  if (trimmed.length <= 255) return trimmed;
+
+  const lastDotIndex = trimmed.lastIndexOf('.');
+  if (lastDotIndex > 0 && lastDotIndex > trimmed.length - 15) {
+    const ext = trimmed.substring(lastDotIndex);
+    const base = trimmed.substring(0, 255 - ext.length);
+    return `${base}${ext}`;
+  }
+  return trimmed.substring(0, 255);
 }
 
 export interface BuildOpdsOptions {
@@ -94,8 +106,8 @@ export function buildOpdsFeed(options: BuildOpdsOptions): string {
   </entry>`;
       } else {
         // KỊCH BẢN 2: Tệp sách (Acquisition Entry cho vBook)
-        // vBook tự nhận diện badge loại file từ thuộc tính type trong acquisition link.
-        // Giữ nguyên 100% tên sách gốc (chỉ gọt bỏ đuôi mở rộng file), không đoán mò tác giả.
+        // Giữ nguyên 100% tên file gốc có đuôi để vBook (j12.c, uya.a) tự vẽ bìa SVG tô màu theo định dạng và in badge format.
+        // Tuyệt đối không đoán mò tác giả để tránh làm hỏng tên sách.
         const displayTitle = cleanBookTitle(item.name);
         const bookMime = item.bookMimeType || 'application/epub+zip';
         const downloadUrl = `${origin}/download/${item.id}${buildSubParams()}`;

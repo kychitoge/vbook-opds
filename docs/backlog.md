@@ -52,6 +52,18 @@ Dự án được quản lý theo chuẩn SemVer và nguyên tắc Dao cạo Ock
 
 ---
 
+## Milestone 5.5: Patch v1.0.2 (Bảo Toàn Đuôi File Sách Cho Contract vBook SVG Cover & Badge)
+- [x] **M5.5.1**: **Bảo toàn phần mở rộng file trong thẻ `<title>` (ADR-004)**:
+  - Sửa hàm `cleanBookTitle` giữ nguyên 100% phần mở rộng (`.epub`, `.pdf`, `.cbz`...).
+  - Giúp `j12.c` và `uya.a` trong vBook nhận diện chính xác đuôi file để tô màu bìa sách SVG (PDF Đỏ, EPUB Xanh, CBZ Cam) và in chữ badge định dạng to trên bìa sách.
+  - Hiển thị đầy đủ nhãn format trên dòng phụ (Subtitle `EPUB · 2.5 MB`).
+- [x] **M5.5.2**: **Cắt ngắn an toàn phòng vệ**:
+  - Tự động cắt ngắn nếu tên file vượt quá 255 ký tự nhưng luôn bảo toàn đuôi file.
+  - Không gọt ký tự rác bằng regex đoán mò.
+- [x] **M5.5.3**: Nâng cấp bộ kiểm thử tự động (Suite 3 & 4) và cập nhật tài liệu Contract, ADR.
+
+---
+
 ## Milestone 6: Minor v1.1.0 (Lộ Trình Tương Lai - 100% Private Drive) [Dự Kiến]
 - [ ] **M6.1**: **Khắc phục Lộ `folderId` trên Public Link (ADR-003)**:
   - Thay thế `folderId` thô bằng mã định danh che giấu (Masked ID / Alias).

@@ -57,20 +57,27 @@ assert(
 );
 console.log('✓ Passed 2. Book MIME types');
 
-console.log('--- 3. Kiểm tra làm sạch tên sách (Bảo toàn 100% tên file gốc) ---');
+console.log('--- 3. Kiểm tra làm sạch tên sách (Bảo toàn 100% tên file gốc có đuôi) ---');
 assert(
-  cleanBookTitle('Dau La Dai Luc - Tap 1.epub') === 'Dau La Dai Luc - Tap 1',
-  'Bảo toàn tên tập không bị cắt cụt'
+  cleanBookTitle('Dau La Dai Luc - Tap 1.epub') === 'Dau La Dai Luc - Tap 1.epub',
+  'Bảo toàn tên tập và đuôi epub cho vBook render icon'
 );
 assert(
-  cleanBookTitle('[Full] Pham Nhan Tu Tien.pdf') === '[Full] Pham Nhan Tu Tien',
-  'Bảo toàn tiền tố [Full]'
+  cleanBookTitle('[Full] Pham Nhan Tu Tien.pdf') === '[Full] Pham Nhan Tu Tien.pdf',
+  'Bảo toàn tiền tố [Full] và đuôi pdf'
 );
 assert(
-  cleanBookTitle('Harry Potter - J.K. Rowling.cbz') === 'Harry Potter - J.K. Rowling',
-  'Bảo toàn nguyên văn tên file'
+  cleanBookTitle('Harry Potter - J.K. Rowling.cbz') === 'Harry Potter - J.K. Rowling.cbz',
+  'Bảo toàn nguyên văn tên file kèm đuôi cbz'
 );
-console.log('✓ Passed 3. Clean Book Title without loss');
+
+const longName = 'A'.repeat(260) + '.epub';
+const cleaned = cleanBookTitle(longName);
+assert(
+  cleaned.length === 255 && cleaned.endsWith('.epub'),
+  'Cắt ngắn an toàn nhưng vẫn bảo toàn đuôi file khi quá 255 ký tự'
+);
+console.log('✓ Passed 3. Clean Book Title with preserved extension');
 
 console.log('--- 4. Kiểm tra sinh OPDS XML chuẩn Contract vBook & Kế thừa Auth ---');
 const items = [
@@ -105,7 +112,7 @@ assert(xmlWithAuth.includes('<feed xmlns="http://www.w3.org/2005/Atom">'), 'Root
 assert(xmlWithAuth.includes('rel="next" href="https://opds.test.com/feed/rootFolder123?auth=dmJvb2s6c2VjcmV0MTIz&amp;page=page2_token_xyz"'), 'Paging kế thừa auth param');
 assert(xmlWithAuth.includes('<link rel="subsection" href="https://opds.test.com/feed/subfolder_1?auth=dmJvb2s6c2VjcmV0MTIz" type="application/atom+xml;profile=opds-catalog"/>'), 'Subfolder kế thừa auth param bảo vệ thư mục con');
 assert(xmlWithAuth.includes('<link rel="http://opds-spec.org/acquisition" href="https://opds.test.com/download/book_1?auth=dmJvb2s6c2VjcmV0MTIz" type="application/epub+zip"/>'), 'Download link kế thừa auth param');
-assert(xmlWithAuth.includes('<title>Pham Nhan Tu Tien - Vong Ngu</title>'), 'Title bảo toàn toàn bộ tên sách không bị cắt cụt');
+assert(xmlWithAuth.includes('<title>Pham Nhan Tu Tien - Vong Ngu.epub</title>'), 'Title bảo toàn đuôi file để vBook render bìa SVG và badge format');
 assert(!xmlWithAuth.includes('<author>'), 'Không có thẻ author đoán mò');
 assert(xmlWithAuth.includes('<link rel="search" href="https://opds.test.com/feed/rootFolder123/opensearch.xml?auth=dmJvb2s6c2VjcmV0MTIz" type="application/opensearchdescription+xml" title="Tìm kiếm sách"/>'), 'Thẻ OpenSearch link trong root feed');
 

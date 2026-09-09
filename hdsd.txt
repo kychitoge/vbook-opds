@@ -1,0 +1,55 @@
+HƯỚNG DẪN SỬ DỤNG OPDS TRÊN VBOOK
+(Đọc sách trực tiếp từ Google Drive)
+================================================================================
+
+1. OPDS LÀ GÌ?
+OPDS là một chuẩn kết nối giúp ứng dụng đọc sách (như vBook) tải danh mục sách 
+và tải file trực tiếp từ trên mạng về máy, thay vì bạn phải tải từng file về rồi 
+chép thủ công vào ứng dụng.
+
+2. DÙNG ĐỂ LÀM GÌ?
+- Biến thư mục sách trên Google Drive của bạn thành kho sách trực tuyến trong vBook.
+- Mở app vBook lên là thấy toàn bộ sách, cần cuốn nào bấm tải đọc cuốn đó ngay.
+- Tự động nhận diện định dạng file (EPUB, PDF, CBZ truyện tranh, MOBI...) và hiển 
+  thị nhãn tương ứng trên kệ sách.
+- Giữ nguyên số tập, số chương theo đúng tên file bạn đặt trên Google Drive.
+- Thích hợp cho cả điện thoại Android và máy đọc sách E-ink (Boox, Likebook, Kobo...) 
+  mà không cần cài ứng dụng Google Drive.
+
+3. LƯU Ý TRƯỚC KHI DÙNG
+- Thư mục Google Drive phải được bật quyền chia sẻ: "Bất kỳ ai có đường liên kết 
+  đều có thể xem".
+- Nên đặt Tên và Mật khẩu khi tạo link để bảo vệ kho sách cá nhân.
+- Cập nhật sách mới:
+  + Kho sách có mật khẩu: Vuốt kéo màn hình xuống (làm mới) là thấy sách mới ngay.
+  + Kho sách công khai: Hệ thống cập nhật sau tối đa 60 giây.
+
+4. HƯỚNG DẪN THỰC HIỆN (3 BƯỚC)
+
+Bước 1: Lấy link thư mục Google Drive
+- Mở Google Drive trên máy tính hoặc trình duyệt điện thoại.
+- Chuột phải vào thư mục chứa sách > Chọn "Chia sẻ" (Share).
+- Ở mục "Quyền truy cập chung", đổi thành "Bất kỳ ai có đường liên kết".
+- Bấm "Sao chép đường liên kết".
+
+Bước 2: Tạo link OPDS
+- Mở trang web Gateway trên trình duyệt.
+- Dán đường link Google Drive vừa sao chép vào ô nhập.
+- Bấm vào "+ Tùy chọn bảo mật & API Key": Nhập Tên và Mật khẩu bạn muốn đặt.
+- Bấm "TẠO ĐƯỜNG DẪN OPDS".
+- Bấm "Sao chép liên kết".
+
+Bước 3: Thêm vào ứng dụng vBook
+- Mở app vBook > Chọn mục "Kho lưu trữ" (biểu tượng đám mây) > Chọn "OPDS".
+- Dán link vừa sao chép vào ô "URL danh mục".
+- Điền đúng Tên và Mật khẩu đã đặt ở Bước 2 (nếu có).
+- Bấm "Lưu".
+Toàn bộ sách và thư mục con trong Drive sẽ hiển thị đầy đủ trên vBook.
+
+5. XỬ LÝ MỘT SỐ LỖI THƯỜNG GẶP
+- Báo lỗi không tìm thấy thư mục (404): Kiểm tra lại xem thư mục Drive đã bật 
+  chế độ "Bất kỳ ai có đường liên kết" chưa.
+- Báo lỗi yêu cầu xác thực (401): Nhập lại đúng Tên và Mật khẩu đã đặt lúc tạo link.
+- Không thấy file sách: Đảm bảo file trong Drive có đuôi định dạng chuẩn được hỗ trợ 
+  như `.epub`, `.cbz`, `.pdf`, `.mobi`, `.cbr`, `.txt`.
+================================================================================
