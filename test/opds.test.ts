@@ -1,6 +1,6 @@
 import { extractFolderId, detectBookMimeType } from '../src/drive';
-import { buildOpdsFeed, parseTitleAndAuthor } from '../src/opds';
-import { verifyBasicAuth, createAuthToken } from '../src/auth';
+import { buildOpdsFeed, buildOpenSearchDescription, cleanBookTitle } from '../src/opds';
+import { verifyBasicAuth, createAuthToken, parseBasicAuthHeader } from '../src/auth';
 
 function assert(condition: boolean, msg: string) {
   if (!condition) {
@@ -8,7 +8,7 @@ function assert(condition: boolean, msg: string) {
   }
 }
 
-console.log('--- 1. Kiểm tra trích xuất Folder ID ---');
+console.log('--- 1. Kiểm tra trích xuất Folder ID & File ID an toàn ---');
 assert(
   extractFolderId('https://drive.google.com/drive/folders/1aBcDeFgHiJkLmNoPqRsTuVwXyZ') ===
     '1aBcDeFgHiJkLmNoPqRsTuVwXyZ',
@@ -27,6 +27,10 @@ assert(
 assert(
   extractFolderId('FOLDER_ID_1234567890') === 'FOLDER_ID_1234567890',
   'Trích xuất ID trực tiếp'
+);
+assert(
+  extractFolderId("' or '1'='1") === null,
+  'Chặn ID độc hại chứa ký tự injection'
 );
 console.log('✓ Passed 1. Folder ID extraction');
 
@@ -53,57 +57,87 @@ assert(
 );
 console.log('✓ Passed 2. Book MIME types');
 
-console.log('--- 3. Kiểm tra trích xuất tác giả và tiêu đề ---');
-const parsed1 = parseTitleAndAuthor('Dau La Dai Luc - Duong Gia Tam Thieu.epub');
-assert(parsed1.title === 'Dau La Dai Luc', 'Title tách dấu gạch ngang');
-assert(parsed1.author === 'Duong Gia Tam Thieu', 'Author tách dấu gạch ngang');
+console.log('--- 3. Kiểm tra làm sạch tên sách (Bảo toàn 100% tên file gốc) ---');
+assert(
+  cleanBookTitle('Dau La Dai Luc - Tap 1.epub') === 'Dau La Dai Luc - Tap 1',
+  'Bảo toàn tên tập không bị cắt cụt'
+);
+assert(
+  cleanBookTitle('[Full] Pham Nhan Tu Tien.pdf') === '[Full] Pham Nhan Tu Tien',
+  'Bảo toàn tiền tố [Full]'
+);
+assert(
+  cleanBookTitle('Harry Potter - J.K. Rowling.cbz') === 'Harry Potter - J.K. Rowling',
+  'Bảo toàn nguyên văn tên file'
+);
+console.log('✓ Passed 3. Clean Book Title without loss');
 
-const parsed2 = parseTitleAndAuthor('[Kim Dung] Tieu Ngao Giang Ho.epub');
-assert(parsed2.title === 'Tieu Ngao Giang Ho', 'Title ngoặc vuông');
-assert(parsed2.author === 'Kim Dung', 'Author ngoặc vuông');
-console.log('✓ Passed 3. Title & Author parser');
+console.log('--- 4. Kiểm tra sinh OPDS XML chuẩn Contract vBook & Kế thừa Auth ---');
+const items = [
+  {
+    id: 'subfolder_1',
+    name: 'Truyện Tiên Hiệp',
+    mimeType: 'application/vnd.google-apps.folder',
+    isFolder: true,
+  },
+  {
+    id: 'book_1',
+    name: 'Pham Nhan Tu Tien - Vong Ngu.epub',
+    mimeType: 'application/epub+zip',
+    bookMimeType: 'application/epub+zip',
+    isFolder: false,
+    thumbnailLink: 'https://lh3.googleusercontent.com/thumbnail123',
+  },
+];
 
-console.log('--- 4. Kiểm tra sinh OPDS XML chuẩn Contract vBook ---');
-const xml = buildOpdsFeed({
-  feedTitle: 'Kho Sách Mẫu',
+// 4.1. Trường hợp có thiết lập auth qua URL
+const xmlWithAuth = buildOpdsFeed({
+  feedTitle: 'Kho Sách Có Mật Khẩu',
   folderId: 'rootFolder123',
   origin: 'https://opds.test.com',
   currentPath: '/feed/rootFolder123',
   nextPageToken: 'page2_token_xyz',
-  items: [
-    {
-      id: 'subfolder_1',
-      name: 'Truyện Tiên Hiệp',
-      mimeType: 'application/vnd.google-apps.folder',
-      isFolder: true,
-    },
-    {
-      id: 'book_1',
-      name: 'Pham Nhan Tu Tien - Vong Ngu.epub',
-      mimeType: 'application/epub+zip',
-      bookMimeType: 'application/epub+zip',
-      isFolder: false,
-      thumbnailLink: 'https://lh3.googleusercontent.com/thumbnail123',
-    },
-  ],
+  authParam: 'dmJvb2s6c2VjcmV0MTIz',
+  items,
 });
 
-assert(xml.includes('<feed xmlns="http://www.w3.org/2005/Atom">'), 'Root element feed');
-assert(xml.includes('rel="next" href="https://opds.test.com/feed/rootFolder123?page=page2_token_xyz"'), 'Paging rel="next"');
-assert(xml.includes('<link rel="subsection" href="https://opds.test.com/feed/subfolder_1" type="application/atom+xml;profile=opds-catalog"/>'), 'Sub-catalog folder');
-assert(xml.includes('<link rel="http://opds-spec.org/acquisition" href="https://opds.test.com/download/book_1" type="application/epub+zip"/>'), 'Book acquisition link');
-assert(xml.includes('<link rel="http://opds-spec.org/image" href="https://lh3.googleusercontent.com/thumbnail123"'), 'Book cover link');
-assert(xml.includes('<title>Pham Nhan Tu Tien.epub</title>'), 'Title bảo lưu đuôi .epub để vBook vẽ badge');
-console.log('✓ Passed 4. OPDS XML Builder Contract');
+assert(xmlWithAuth.includes('<feed xmlns="http://www.w3.org/2005/Atom">'), 'Root element feed');
+assert(xmlWithAuth.includes('rel="next" href="https://opds.test.com/feed/rootFolder123?auth=dmJvb2s6c2VjcmV0MTIz&amp;page=page2_token_xyz"'), 'Paging kế thừa auth param');
+assert(xmlWithAuth.includes('<link rel="subsection" href="https://opds.test.com/feed/subfolder_1?auth=dmJvb2s6c2VjcmV0MTIz" type="application/atom+xml;profile=opds-catalog"/>'), 'Subfolder kế thừa auth param bảo vệ thư mục con');
+assert(xmlWithAuth.includes('<link rel="http://opds-spec.org/acquisition" href="https://opds.test.com/download/book_1?auth=dmJvb2s6c2VjcmV0MTIz" type="application/epub+zip"/>'), 'Download link kế thừa auth param');
+assert(xmlWithAuth.includes('<title>Pham Nhan Tu Tien - Vong Ngu</title>'), 'Title bảo toàn toàn bộ tên sách không bị cắt cụt');
+assert(!xmlWithAuth.includes('<author>'), 'Không có thẻ author đoán mò');
+assert(xmlWithAuth.includes('<link rel="search" href="https://opds.test.com/feed/rootFolder123/opensearch.xml?auth=dmJvb2s6c2VjcmV0MTIz" type="application/opensearchdescription+xml" title="Tìm kiếm sách"/>'), 'Thẻ OpenSearch link trong root feed');
 
-console.log('--- 5. Kiểm tra Basic Auth ---');
+// 4.2. Trường hợp feed công khai không cài auth
+const xmlPublic = buildOpdsFeed({
+  feedTitle: 'Kho Sách Công Khai',
+  folderId: 'rootFolder123',
+  origin: 'https://opds.test.com',
+  currentPath: '/feed/rootFolder123',
+  items,
+});
+assert(!xmlPublic.includes('auth='), 'Feed công khai sạch link hoàn toàn không có auth param');
+console.log('✓ Passed 4. OPDS XML Builder Contract & Auth inheritance');
+
+console.log('--- 5. Kiểm tra OpenSearch Description Builder ---');
+const openSearchXml = buildOpenSearchDescription('https://opds.test.com', 'folder123', 'API_KEY_VAL', 'TOKEN123');
+assert(openSearchXml.includes('<OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">'), 'Root OpenSearchDescription tag');
+assert(openSearchXml.includes('template="https://opds.test.com/feed/folder123/search?q={searchTerms}&amp;key=API_KEY_VAL&amp;auth=TOKEN123"'), 'Search URL template kế thừa key và auth');
+console.log('✓ Passed 5. OpenSearch Description Builder');
+
+console.log('--- 6. Kiểm tra Basic Auth & Giải mã Header ---');
 const token = createAuthToken('vbook', 'secret123');
 assert(verifyBasicAuth(`Basic ${token}`, token) === true, 'Đúng auth token');
 assert(verifyBasicAuth('Basic wrong_token', token) === false, 'Sai auth token');
 assert(verifyBasicAuth(null, token) === false, 'Thiếu auth header');
 assert(verifyBasicAuth(null, undefined) === true, 'Không cài đặt auth');
-console.log('✓ Passed 5. Basic Auth Verification');
+
+const credentials = parseBasicAuthHeader(`Basic ${token}`);
+assert(credentials !== null && credentials.user === 'vbook' && credentials.pass === 'secret123', 'Giải mã đúng user và pass');
+assert(parseBasicAuthHeader('InvalidHeader') === null, 'Header không hợp lệ trả về null');
+console.log('✓ Passed 6. Basic Auth Verification & Header Parser');
 
 console.log('\n=========================================');
-console.log('TẤT CẢ 5 BỘ KIỂM THỬ ĐỀU ĐẠT CHUẨN 100%!');
+console.log('TẤT CẢ 6 BỘ KIỂM THỬ ĐỀU ĐẠT CHUẨN 100%!');
 console.log('=========================================');

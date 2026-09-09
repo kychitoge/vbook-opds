@@ -1,53 +1,61 @@
 # Kế Hoạch Triển Khai & Danh Sách Công Việc (Backlog)
 
-Dự án được chia thành 4 giai đoạn tinh gọn (Milestones) theo nguyên tắc Ockham's Razor và $0 Infra:
+Dự án được quản lý theo chuẩn SemVer và nguyên tắc Dao cạo Ockham ($0 Infra):
 
 ---
 
-## Milestone 1: Nền Tảng & Engine Adapter Core (Core Engine)
+## Milestone 1: Nền Tảng & Engine Adapter Core (v1.0.0)
 - [x] **M1.1**: Khởi tạo project Cloudflare Worker với TypeScript + Hono Framework.
 - [x] **M1.2**: Module trích xuất Folder ID từ URL Google Drive (hỗ trợ nhiều format link chia sẻ khác nhau).
 - [x] **M1.3**: Module tương tác Google Drive API v3:
   - Lấy danh sách file và folder con (`pageSize = 50`, phân trang `pageToken`).
   - Lọc các file định dạng sách: `.epub`, `.cbz`, `.pdf`, `.mobi`, `.cbr`, `.fb2`, `.txt`.
-- [x] **M1.4**: Module sinh XML Atom (OPDS 1.2 Feed Builder):
-  - Ánh xạ Navigation Entry (cho Folder).
-  - Ánh xạ Acquisition Entry (cho Sách) kèm đúng MIME types (`application/epub+zip`, `application/vnd.comicbook+zip`, `application/pdf`).
-  - Bảo lưu đuôi file trong `<title>` để vBook tự động vẽ huy hiệu định dạng.
-  - Sinh thẻ `rel="next"` để hỗ trợ Infinite Scroll trên vBook.
-  - Xử lý thumbnail/cover image thật từ Drive, không tạo SVG giả cho file EPUB.
+- [x] **M1.4**: Module sinh XML Atom (OPDS 1.2 Feed Builder).
 
 ---
 
-## Milestone 2: Cơ Chế Tải Sách & Bảo Mật (Streaming & Auth)
+## Milestone 2: Cơ Chế Tải Sách & Bảo Mật Cơ Bản (v1.0.0)
 - [x] **M2.1**: Endpoint tải sách `/download/:fileId`:
-  - Trả về mã `HTTP 302 Found` chuyển hướng trực tiếp đến Google Drive Direct Download (`https://drive.google.com/uc?export=download&id=:fileId`).
-- [x] **M2.2**: Middleware HTTP Basic Auth (Stateless):
-  - Hỗ trợ mã hóa user/pass trong signature token hoặc Header `Authorization: Basic ...` để vBook gửi kèm khi duyệt và tải sách.
-- [x] **M2.3**: Cơ chế Cache phân tách:
-  - Thư mục công khai: Edge cache 60s tiết kiệm quota API.
-  - Thư mục bảo mật: `private, no-store` đảm bảo tuyệt đối tính riêng tư.
+  - Trả về mã `HTTP 302 Found` chuyển hướng trực tiếp đến Google Drive Direct Download.
+- [x] **M2.2**: Xác thực HTTP Basic Auth phi trạng thái (Stateless).
+- [x] **M2.3**: Cơ chế Cache phân tách (Public Edge Cache 60s vs Private `no-store`).
 
 ---
 
-## Milestone 3: Giao Diện Người Dùng Tối Giản (Minimal UI)
+## Milestone 3: Giao Diện Người Dùng Tối Giản (v1.0.0)
 - [x] **M3.1**: Xây dựng UI HTML/CSS nhúng trực tiếp trong Worker (zero-dependency).
-- [x] **M3.2**: Áp dụng Design Tokens chuẩn:
-  - Accent Color: `#038fd2` (Ocean Blue).
-  - Dark Mode: Background `#020617`, Card `#0f172a`, Text `#e2e8f0` dịu mắt.
-  - Light Mode: Background `#f8fafc`.
+- [x] **M3.2**: Áp dụng Design Tokens chuẩn: Ocean Blue `#038fd2`, Dark/Light Mode.
 - [x] **M3.3**: Form 1-click sinh link OPDS + nút Copy vào Clipboard + hướng dẫn 3 bước dán vào vBook.
-- [x] **M3.4**: Tinh chỉnh Production: Loại bỏ Emoji, thay bằng vector icon Lucide SVG sắc nét, ẩn thanh cuộn xấu xí, hỗ trợ cuộn ngang mượt mà.
 
 ---
 
-## Milestone 4: Kiểm Thử Thực Tế & Triển Khai (Verification & Cloudflare Deploy)
-- [x] **M4.1**: Kiểm thử tích hợp trực tiếp trên ứng dụng vBook thật:
-  - Test thêm tài khoản OPDS với URL sinh từ Gateway.
-  - Test duyệt cây thư mục Google Drive (Folder lồng Folder).
-  - Test tải sách .epub về vBook và mở đọc bình thường.
-  - Test phân trang cuộn mượt mà.
-  - Test xác thực Basic Auth (nhập sai pass $\rightarrow$ chặn 401, đúng pass $\rightarrow$ mở).
-  - Test xử lý lỗi thư mục Drive chưa chia sẻ công khai (thông báo tiếng Việt thân thiện).
+## Milestone 4: Kiểm Thử Thực Tế & Triển Khai (v1.0.0)
+- [x] **M4.1**: Kiểm thử tích hợp trực tiếp trên ứng dụng vBook thật.
 - [x] **M4.2**: Viết hướng dẫn cấu hình Cloudflare Worker + Cấu hình Custom Domain (DNS).
-- [x] **M4.3**: Bộ kiểm thử tự động 5 scenarios đạt 100% qua `pnpm test`.
+
+---
+
+## Milestone 5: Patch v1.0.1 (Contract Alignment, Security Hardening & OpenSearch)
+- [x] **M5.1**: **Cắt bỏ Over-Engineering & Đoán mò (ADR-001)**:
+  - Xóa deadcode SVG `cover.ts` và route `/cover/:fileId`.
+  - Thay thế regex bói tác giả bằng hàm `cleanBookTitle`: Bảo toàn 100% tên sách gốc từ Google Drive (không bị cắt cụt tập/chương, triệt tiêu lỗi lặp badge `[EPUB] [EPUB]`).
+  - Loại bỏ thẻ `<author>` đoán mò, tuân thủ đúng chuẩn optional của Atom OPDS.
+- [x] **M5.2**: **Vá Lỗ Hổng Bảo Mật & Kế Thừa Auth (ADR-002)**:
+  - Kế thừa `authParam` xuyên suốt toàn bộ cây thư mục con và link download, xóa bỏ hoàn toàn nguy cơ Auth Bypass trên subfolders.
+  - Thêm Input Validation cho `fileId` bằng regex `/^[a-zA-Z0-9_-]{10,60}$/` chống Injection và Open Redirect.
+  - Thuật toán so khớp mật khẩu thời gian hằng số `constantTimeEqual` chống Timing Attack.
+  - Che giấu stack trace và mã lỗi nội bộ từ Google API (Information Disclosure).
+- [x] **M5.3**: **Bổ sung Đặc Tả Tìm Kiếm OpenSearch 1.1**:
+  - Endpoint `/feed/:folderId/opensearch.xml` và `/feed/:folderId/search?q=...`.
+  - Thẻ `<link rel="search">` trong feed root, sẵn sàng đón đầu các bản cập nhật vBook tương lai.
+- [x] **M5.4**: Nâng cấp bộ kiểm thử tự động lên 6 test suites đạt 100% qua `pnpm test`.
+
+---
+
+## Milestone 6: Minor v1.1.0 (Lộ Trình Tương Lai - 100% Private Drive) [Dự Kiến]
+- [ ] **M6.1**: **Khắc phục Lộ `folderId` trên Public Link (ADR-003)**:
+  - Thay thế `folderId` thô bằng mã định danh che giấu (Masked ID / Alias).
+- [ ] **M6.2**: **Hỗ trợ Google Service Account (Zero Public Link)**:
+  - Cho phép người dùng kết nối qua Service Account để đọc thư mục hoàn toàn Private trên Google Drive (không cần bật chế độ "Bất kỳ ai có liên kết").
+- [ ] **M6.3**: **Proxy Stream Download**:
+  - Tải luồng byte sách trực tiếp qua Worker có kiểm soát bộ nhớ đệm (Edge Caching) cho các file Private không thể 302 Redirect.

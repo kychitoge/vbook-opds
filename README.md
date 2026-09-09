@@ -1,11 +1,12 @@
-# VBook OPDS Gateway (Cloudflare Worker)
+# VBook OPDS Gateway (Cloudflare Worker) - v1.0.1
 
-> **Cổng chuyển đổi giao thức (Protocol Adapter)** biến thư mục Google Drive thành kho sách điện tử chuẩn OPDS 1.2 dành riêng cho ứng dụng **vBook**.
+> **Cổng chuyển đổi giao thức (Protocol Adapter)** biến thư mục Google Drive thành kho sách điện tử chuẩn OPDS 1.2 dành riêng cho ứng dụng **vBook** và các ứng dụng đọc OPDS tiêu chuẩn (Moon+ Reader, KOReader).
 
 - **Chi phí hạ tầng:** **$0** (chạy trên Cloudflare Workers Free Tier).
-- **Băng thông:** **$0** (Sách được chuyển hướng tải trực tiếp từ máy chủ Google, không lưu trữ qua Cloudflare).
-- **Bảo mật & DMCA-free:** Không lưu trữ nội dung, không có database, hỗ trợ HTTP Basic Auth bảo vệ kho sách cá nhân.
+- **Băng thông:** **$0** (Sách được chuyển hướng tải trực tiếp từ máy chủ Google CDN, không lưu trữ qua Cloudflare).
+- **Bảo mật & DMCA-free:** Không lưu trữ nội dung, không có database, hỗ trợ HTTP Basic Auth bảo vệ toàn diện cây thư mục cá nhân.
 - **Hỗ trợ thiết bị:** Hoạt động hoàn hảo trên điện thoại Android và các dòng **máy đọc sách E-ink** (Onyx Boox, Likebook, Kobo, Kindle jailbreak) không có Google Play Services.
+- **Tương thích Contract vBook:** Hiển thị tên sách sạch sẽ, nhận diện huy hiệu định dạng chính xác qua MIME types, bảo toàn nguyên vẹn số tập/chương.
 
 ---
 
@@ -16,7 +17,7 @@
 # Cài đặt dependencies
 pnpm install
 
-# Chạy kiểm thử tự động
+# Chạy kiểm thử tự động (6 test suites)
 pnpm test
 
 # Chạy server thử nghiệm
@@ -43,7 +44,7 @@ npx wrangler secret put GOOGLE_API_KEY
 
 #### Bước 3: Deploy
 ```bash
-pnpm deploy
+pnpm run predeploy && pnpm deploy
 ```
 Wrangler sẽ trả về đường dẫn URL dạng: `https://vbook-opds.<your-subdomain>.workers.dev`.
 
@@ -59,14 +60,14 @@ Wrangler sẽ trả về đường dẫn URL dạng: `https://vbook-opds.<your-s
 ## 📱 Hướng Dẫn Thêm Vào Ứng Dụng vBook
 
 1. Mở trang Web Gateway vừa deploy &rarr; Dán đường link thư mục Google Drive của bạn (ví dụ: `https://drive.google.com/drive/folders/...`).
-2. (Tùy chọn) Điền Tên và Mật khẩu nếu muốn đặt mật khẩu riêng cho kho.
+2. (Tùy chọn) Điền Tên và Mật khẩu nếu muốn đặt mật khẩu riêng cho kho sách.
 3. Bấm **TẠO ĐƯỜNG DẪN OPDS** &rarr; Bấm **Sao Chép**.
 4. Mở ứng dụng **vBook**:
    - Vào mục **Kho lưu trữ** (Cloud) &rarr; Chọn **OPDS**.
    - Dán URL vừa sao chép vào ô **URL danh mục**.
    - Điền Tên & Mật khẩu (nếu có thiết lập ở bước 2).
    - Bấm **Lưu**.
-5. Toàn bộ sách (`.epub`, `.cbz`, `.pdf`, `.mobi`) và các thư mục con trong Google Drive sẽ hiện lên kệ sách vBook như một thư viện chuyên nghiệp!
+5. Toàn bộ sách (`.epub`, `.cbz`, `.pdf`, `.mobi`, `.cbr`, `.fb2`, `.txt`) và các thư mục con trong Google Drive sẽ hiện lên kệ sách vBook như một thư viện chuyên nghiệp!
 
 ---
 
@@ -74,21 +75,22 @@ Wrangler sẽ trả về đường dẫn URL dạng: `https://vbook-opds.<your-s
 
 ```
 vbook-opds/
-├── docs/                      # Tài liệu kỹ thuật dự án
+├── docs/                      # Tài liệu kỹ thuật chi tiết
 │   ├── architecture.md        # Kiến trúc tổng thể & luồng $0 băng thông
 │   ├── vbook-contract.md      # Đặc tả Contract OPDS XML của vBook
 │   ├── ui-spec.md             # Đặc tả UI tối giản & Design Tokens
-│   └── backlog.md             # Kế hoạch công việc 4 Milestones
+│   └── backlog.md             # Kế hoạch công việc & Lộ trình SemVer
+├── .agents/
+│   └── decisions.md           # Sổ ghi nhận quyết định kiến trúc (ADR)
 ├── src/
-│   ├── index.ts               # Entry point Hono router
-│   ├── drive.ts               # Xử lý Google Drive API v3
-│   ├── opds.ts                # Sinh XML Atom OPDS 1.2
-│   ├── auth.ts                # Xác thực HTTP Basic Auth
+│   ├── index.ts               # Router Hono chính & middleware xác thực
+│   ├── drive.ts               # Xử lý Google Drive API v3 & tìm kiếm sách
+│   ├── opds.ts                # Sinh XML Atom OPDS 1.2 & OpenSearch Description
+│   ├── auth.ts                # Xác thực HTTP Basic Auth (Timing-safe)
 │   └── ui.ts                  # Giao diện Web tối giản nhúng Worker
 ├── test/
-│   └── opds.test.ts           # Bộ kiểm thử tự động
-├── .env.example               # Mẫu biến môi trường
-├── package.json
+│   └── opds.test.ts           # Bộ 6 kiểm thử tự động toàn diện
+├── package.json               # v1.0.1
 ├── tsconfig.json
 ├── wrangler.toml              # Cấu hình Cloudflare Workers
 └── LICENSE                    # Giấy phép MIT

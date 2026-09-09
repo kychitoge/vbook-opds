@@ -73,60 +73,17 @@ export function detectBookMimeType(fileName: string, mimeType: string): string |
   return null;
 }
 
-/**
- * Gọi Google Drive API v3 để lấy danh sách file & folder
- */
-export async function fetchDriveFolder(options: {
-  folderId: string;
-  apiKey: string;
-  pageToken?: string;
-  pageSize?: number;
-}): Promise<FetchDriveResult> {
-  const { folderId, apiKey, pageToken, pageSize = 50 } = options;
+interface RawDriveFile {
+  id: string;
+  name: string;
+  mimeType: string;
+  size?: string;
+  modifiedTime?: string;
+  thumbnailLink?: string;
+  hasThumbnail?: boolean;
+}
 
-  const query = `'${folderId}' in parents and trashed = false`;
-  const fields = 'nextPageToken, files(id, name, mimeType, size, modifiedTime, thumbnailLink, hasThumbnail)';
-  const orderBy = 'folder desc, name asc';
-
-  const url = new URL('https://www.googleapis.com/drive/v3/files');
-  url.searchParams.set('q', query);
-  url.searchParams.set('fields', fields);
-  url.searchParams.set('orderBy', orderBy);
-  url.searchParams.set('pageSize', pageSize.toString());
-  url.searchParams.set('key', apiKey);
-  url.searchParams.set('spaces', 'drive');
-  url.searchParams.set('supportsAllDrives', 'true');
-  url.searchParams.set('includeItemsFromAllDrives', 'true');
-
-  if (pageToken) {
-    url.searchParams.set('pageToken', pageToken);
-  }
-
-  const response = await fetch(url.toString(), {
-    headers: {
-      'Accept': 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(`Google Drive API error (${response.status}): ${errorBody}`);
-  }
-
-  const data = (await response.json()) as {
-    files?: Array<{
-      id: string;
-      name: string;
-      mimeType: string;
-      size?: string;
-      modifiedTime?: string;
-      thumbnailLink?: string;
-      hasThumbnail?: boolean;
-    }>;
-    nextPageToken?: string;
-  };
-
-  const files = data.files || [];
+function parseDriveFiles(files: RawDriveFile[]): DriveItem[] {
   const items: DriveItem[] = [];
 
   for (const f of files) {
@@ -157,8 +114,82 @@ export async function fetchDriveFolder(options: {
     }
   }
 
+  return items;
+}
+
+async function executeDriveQuery(options: {
+  query: string;
+  apiKey: string;
+  pageToken?: string;
+  pageSize?: number;
+}): Promise<FetchDriveResult> {
+  const { query, apiKey, pageToken, pageSize = 50 } = options;
+  const fields = 'nextPageToken, files(id, name, mimeType, size, modifiedTime, thumbnailLink, hasThumbnail)';
+  const orderBy = 'folder desc, name asc';
+
+  const url = new URL('https://www.googleapis.com/drive/v3/files');
+  url.searchParams.set('q', query);
+  url.searchParams.set('fields', fields);
+  url.searchParams.set('orderBy', orderBy);
+  url.searchParams.set('pageSize', pageSize.toString());
+  url.searchParams.set('key', apiKey);
+  url.searchParams.set('spaces', 'drive');
+  url.searchParams.set('supportsAllDrives', 'true');
+  url.searchParams.set('includeItemsFromAllDrives', 'true');
+
+  if (pageToken) {
+    url.searchParams.set('pageToken', pageToken);
+  }
+
+  const response = await fetch(url.toString(), {
+    headers: {
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`Google Drive API error (${response.status}): ${errorBody}`);
+  }
+
+  const data = (await response.json()) as {
+    files?: RawDriveFile[];
+    nextPageToken?: string;
+  };
+
   return {
-    items,
+    items: parseDriveFiles(data.files || []),
     nextPageToken: data.nextPageToken,
   };
+}
+
+/**
+ * Gọi Google Drive API v3 để lấy danh sách file & folder
+ */
+export async function fetchDriveFolder(options: {
+  folderId: string;
+  apiKey: string;
+  pageToken?: string;
+  pageSize?: number;
+}): Promise<FetchDriveResult> {
+  const { folderId, apiKey, pageToken, pageSize } = options;
+  const query = `'${folderId}' in parents and trashed = false`;
+  return executeDriveQuery({ query, apiKey, pageToken, pageSize });
+}
+
+/**
+ * Tìm kiếm sách trong thư mục Google Drive theo từ khóa tên file
+ */
+export async function searchDriveFolder(options: {
+  folderId: string;
+  apiKey: string;
+  searchTerm: string;
+  pageToken?: string;
+  pageSize?: number;
+}): Promise<FetchDriveResult> {
+  const { folderId, apiKey, searchTerm, pageToken, pageSize } = options;
+  // Escape ký tự đặc biệt trong search term để an toàn cho query string
+  const sanitized = searchTerm.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  const query = `'${folderId}' in parents and trashed = false and name contains '${sanitized}'`;
+  return executeDriveQuery({ query, apiKey, pageToken, pageSize });
 }
