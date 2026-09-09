@@ -1,10 +1,10 @@
-# VBook OPDS Gateway (Cloudflare Worker) - v1.0.2
+# VBook OPDS Gateway (Cloudflare Worker) - v1.1.0
 
 > **Cổng chuyển đổi giao thức (Protocol Adapter)** biến thư mục Google Drive thành kho sách điện tử chuẩn OPDS 1.2 dành riêng cho ứng dụng **vBook** và các ứng dụng đọc OPDS tiêu chuẩn (Moon+ Reader, KOReader).
 
 - **Chi phí hạ tầng:** **$0** (chạy trên Cloudflare Workers Free Tier).
 - **Băng thông:** **$0** (Sách được chuyển hướng tải trực tiếp từ máy chủ Google CDN, không lưu trữ qua Cloudflare).
-- **Bảo mật & DMCA-free:** Không lưu trữ nội dung, không có database, hỗ trợ HTTP Basic Auth bảo vệ toàn diện cây thư mục cá nhân.
+- **Bảo mật & Quyền riêng tư (Privacy Shield):** Tự động mã hóa/ẩn Folder ID thành `m_...` (AES-256-GCM) chống lộ danh tính tài khoản Google, hỗ trợ HTTP Basic Auth bảo vệ toàn diện cây thư mục cá nhân.
 - **Hỗ trợ thiết bị:** Hoạt động hoàn hảo trên điện thoại Android và các dòng **máy đọc sách E-ink** (Onyx Boox, Likebook, Kobo, Kindle jailbreak) không có Google Play Services.
 - **Tương thích Contract vBook:** Bảo toàn đuôi file trong tên sách để kích hoạt bộ sinh bìa SVG tô màu theo định dạng và hiển thị badge format chuẩn xác trên kệ vBook.
 
@@ -34,13 +34,18 @@ Mở trình duyệt tại `http://localhost:8787` để trải nghiệm giao di�
 npx wrangler login
 ```
 
-#### Bước 2: [Khuyên dùng] Cấu hình Google Drive API Key mặc định
-Lấy một Google API Key miễn phí từ [Google Cloud Console](https://console.cloud.google.com/apis/credentials) (Bật thư viện *Google Drive API*):
+#### Bước 2: [Khuyên dùng] Cấu hình Secrets cho Worker (Admin)
+1. Cấu hình Google Drive API Key mặc định:
 ```bash
 npx wrangler secret put GOOGLE_API_KEY
-# Dán API Key của bạn vào terminal
+# Dán API Key từ Google Cloud Console vào terminal
 ```
-*(Nếu không cấu hình, người dùng vẫn có thể tự điền API Key cá nhân trên giao diện web).*
+2. Cấu hình Khóa bí mật mã hóa URL (Privacy Shield):
+```bash
+npx wrangler secret put MASK_SECRET
+# Dán một chuỗi ký tự bí mật ngẫu nhiên của riêng bạn
+```
+*(Nếu không cấu hình, người dùng vẫn có thể tự điền API Key cá nhân trên giao diện web, và Worker tự dùng khóa dẫn xuất dự phòng).*
 
 #### Bước 3: Deploy
 ```bash
@@ -84,13 +89,14 @@ vbook-opds/
 │   └── decisions.md           # Sổ ghi nhận quyết định kiến trúc (ADR)
 ├── src/
 │   ├── index.ts               # Router Hono chính & middleware xác thực
-│   ├── drive.ts               # Xử lý Google Drive API v3 & tìm kiếm sách
-│   ├── opds.ts                # Sinh XML Atom OPDS 1.2 & OpenSearch Description
+│   ├── crypto.ts              # Mã hóa / Giải mã Folder ID (AES-256-GCM)
+│   ├── drive.ts               # Xử lý Google Drive API v3
+│   ├── opds.ts                # Sinh XML Atom OPDS 1.2
 │   ├── auth.ts                # Xác thực HTTP Basic Auth (Timing-safe)
 │   └── ui.ts                  # Giao diện Web tối giản nhúng Worker
 ├── test/
-│   └── opds.test.ts           # Bộ 6 kiểm thử tự động toàn diện
-├── package.json               # v1.0.2
+│   └── opds.test.ts           # Bộ 7 kiểm thử tự động toàn diện
+├── package.json               # v1.1.0
 ├── tsconfig.json
 ├── wrangler.toml              # Cấu hình Cloudflare Workers
 └── LICENSE                    # Giấy phép MIT

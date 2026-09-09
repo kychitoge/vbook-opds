@@ -441,45 +441,43 @@ export function renderHtmlPage(defaultApiKeyConfigured: boolean): string {
     const checkIcon = document.getElementById('checkIcon');
     const copyText = document.getElementById('copyText');
 
-    form.addEventListener('submit', (e) => {
+    form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const driveVal = document.getElementById('driveInput').value.trim();
       const apiKeyVal = document.getElementById('apiKeyInput')?.value.trim() || '';
       const userVal = document.getElementById('usernameInput').value.trim();
       const passVal = document.getElementById('passwordInput').value.trim();
 
-      // Extract folder ID
-      let folderId = driveVal;
-      const folderMatch = driveVal.match(/\\/folders\\/([a-zA-Z0-9_-]+)/);
-      if (folderMatch && folderMatch[1]) {
-        folderId = folderMatch[1];
-      } else {
-        const idMatch = driveVal.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-        if (idMatch && idMatch[1]) {
-          folderId = idMatch[1];
+      try {
+        const resp = await fetch('/api/mask', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folderId: driveVal }),
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.maskedId) {
+          alert(data.error || 'Vui lòng nhập đường link thư mục Google Drive hợp lệ!');
+          return;
         }
+
+        const currentOrigin = window.location.origin;
+        const url = new URL(\`\${currentOrigin}/feed/\${data.maskedId}\`);
+
+        if (apiKeyVal) {
+          url.searchParams.set('key', apiKeyVal);
+        }
+
+        if (userVal && passVal) {
+          const token = btoa(\`\${userVal}:\${passVal}\`);
+          url.searchParams.set('auth', token);
+        }
+
+        const fullUrl = url.toString();
+        outputUrl.textContent = fullUrl;
+        resultBox.style.display = 'block';
+      } catch {
+        alert('Lỗi kết nối máy chủ khi tạo đường dẫn OPDS!');
       }
-
-      if (!folderId) {
-        alert('Vui lòng nhập đường link thư mục Google Drive hợp lệ!');
-        return;
-      }
-
-      const currentOrigin = window.location.origin;
-      const url = new URL(\`\${currentOrigin}/feed/\${folderId}\`);
-
-      if (apiKeyVal) {
-        url.searchParams.set('key', apiKeyVal);
-      }
-
-      if (userVal && passVal) {
-        const token = btoa(\`\${userVal}:\${passVal}\`);
-        url.searchParams.set('auth', token);
-      }
-
-      const fullUrl = url.toString();
-      outputUrl.textContent = fullUrl;
-      resultBox.style.display = 'block';
     });
 
     copyBtn.addEventListener('click', () => {

@@ -36,8 +36,8 @@ Phản hồi từ Gateway bắt buộc phải là XML Atom với root element `<
   <!-- Phân trang (Pagination): vBook tìm kiếm rel="next" để kích hoạt cuộn vô tận (Infinite Scroll) -->
   <link rel="next" href="{nextPageUrl}" type="application/atom+xml;profile=opds-catalog"/>
 
-  <!-- OpenSearch 1.1 Descriptor: Chuẩn bị sẵn cho các phiên bản vBook tương lai và hỗ trợ Moon+ Reader/KOReader -->
-  <link rel="search" href="{searchUrl}" type="application/opensearchdescription+xml" title="Tìm kiếm sách"/>
+  <!-- OpenSearch 1.1 Descriptor: Tạm thời vô hiệu hóa ở v1.1.0 theo trạng thái client vBook hiện tại -->
+  <!-- <link rel="search" href="{searchUrl}" type="application/opensearchdescription+xml" title="Tìm kiếm sách"/> -->
 
   <!-- Danh sách các Entry (Thư mục con hoặc Sách) -->
   ...
@@ -54,6 +54,7 @@ vBook phân tích từng thẻ `<entry>` theo 2 kịch bản phân nhánh rõ r�
 Được kích hoạt khi `<entry>` **không chứa bất kỳ acquisition link nào** và chứa link có type `application/atom+xml`:
 * vBook đánh dấu thuộc tính `isFolder = true` và hiển thị icon thư mục.
 * Khi người dùng nhấp vào, vBook điều hướng vào URL được chỉ định trong `href`.
+* **Bảo vệ danh tính (từ v1.1.0):** `subFolderId` trong đường dẫn `href` được Gateway tự động mã hóa thành `m_...` (AES-256-GCM) để người dùng khi duyệt vào thư mục con không bị lộ `folderId` gốc của Google Drive.
 * Nếu feed gốc có cài đặt mật khẩu, Gateway tự động kế thừa `authParam` vào `href` để bảo vệ toàn diện thư mục con.
 
 ```xml
@@ -62,8 +63,8 @@ vBook phân tích từng thẻ `<entry>` theo 2 kịch bản phân nhánh rõ r�
   <title>Tên Thư Mục Con (Ví dụ: Tiên Hiệp)</title>
   <updated>2026-09-09T00:00:00Z</updated>
   <summary>Thư mục: Tiên Hiệp</summary>
-  <!-- Link chuyển tiếp vào danh mục con -->
-  <link rel="subsection" type="application/atom+xml;profile=opds-catalog" href="/feed/{subFolderId}?auth={token}"/>
+  <!-- Link chuyển tiếp vào danh mục con (đã mã hóa ID m_... và kế thừa auth) -->
+  <link rel="subsection" type="application/atom+xml;profile=opds-catalog" href="/feed/m_{maskedSubFolderId}?auth={token}"/>
 </entry>
 ```
 

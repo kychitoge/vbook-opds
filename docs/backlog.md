@@ -64,10 +64,24 @@ Dự án được quản lý theo chuẩn SemVer và nguyên tắc Dao cạo Ock
 
 ---
 
-## Milestone 6: Minor v1.1.0 (Lộ Trình Tương Lai - 100% Private Drive) [Dự Kiến]
-- [ ] **M6.1**: **Khắc phục Lộ `folderId` trên Public Link (ADR-003)**:
-  - Thay thế `folderId` thô bằng mã định danh che giấu (Masked ID / Alias).
-- [ ] **M6.2**: **Hỗ trợ Google Service Account (Zero Public Link)**:
-  - Cho phép người dùng kết nối qua Service Account để đọc thư mục hoàn toàn Private trên Google Drive (không cần bật chế độ "Bất kỳ ai có liên kết").
-- [ ] **M6.3**: **Proxy Stream Download**:
-  - Tải luồng byte sách trực tiếp qua Worker có kiểm soát bộ nhớ đệm (Edge Caching) cho các file Private không thể 302 Redirect.
+## Milestone 6: Minor v1.1.0 (Bảo Vệ Quyền Riêng Tư - Stateless URL Masking & Tạm Dừng OpenSearch)
+- [x] **M6.1**: **Khắc phục Lộ `folderId` trên Public Link (ADR-005)**:
+  - Thay thế `folderId` thô bằng chuỗi mã hóa an toàn có tiền tố `m_` dùng thuật toán **AES-256-GCM** ($0 database).
+  - Ngăn chặn kẻ lạ lấy `folderId` mở trên web Google Drive để soi tên tài khoản, avatar, email hoặc các file cá nhân ngoài sách.
+  - Tích hợp tính năng chống giả mạo (Tamper-proof) nhờ Auth Tag của AES-GCM.
+  - Đảm bảo tương thích ngược 100%: Nhận diện cả `folderId` thô lẫn `m_...`.
+- [x] **M6.2**: **Che giấu toàn bộ thư mục con trong XML Atom Feed**:
+  - Tự động mã hóa các thư mục con thành `m_...` trong thẻ `<id>` và `<link rel="subsection">`. Real ID không xuất hiện ở bất kỳ đâu trong XML.
+- [x] **M6.3**: **Tạm dừng OpenSearch**:
+  - Comment out các route `/opensearch.xml`, `/search` và thẻ `<link rel="search">` trong feed Atom do app vBook hiện chưa kích hoạt tìm kiếm OPDS.
+- [x] **M6.4**: **Giữ nguyên 100% Web UI & Tự động ẩn ID**:
+  - Giữ nguyên giao diện tối giản, tự động gọi `/api/mask` để sinh link `m_...` mặc định cho người dùng.
+  - Phân quyền Admin: Admin cấu hình `MASK_SECRET` trên Cloudflare Worker, người dùng cuối không cần cấu hình gì thêm.
+- [x] **M6.5**: Nâng cấp bộ kiểm thử tự động lên 7 test suites đạt 100% qua `pnpm test`.
+
+---
+
+## Milestone 7: Minor v1.2.0 (Google Service Account - Zero Public Link) [Dự Kiến]
+- [ ] **M7.1**: Hỗ trợ kết nối Google Service Account (`credentials.json` / private key RS256).
+- [ ] **M7.2**: Đọc thư mục Google Drive hoàn toàn đóng (100% Private, không bật public link).
+- [ ] **M7.3**: Proxy stream có kiểm soát bộ nhớ đệm cho các file sách Private không thể 302 Redirect.

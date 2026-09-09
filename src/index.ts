@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { fetchDriveFolder, searchDriveFolder, extractFolderId } from './drive';
-import { buildOpdsFeed, buildOpenSearchDescription } from './opds';
+import { fetchDriveFolder, extractFolderId } from './drive';
+import { buildOpdsFeed } from './opds';
 import { verifyBasicAuth, createAuthToken } from './auth';
+import { maskFolderId, unmaskFolderId, isMaskedId } from './crypto';
 import { renderHtmlPage } from './ui';
 
 export interface Env {
@@ -11,12 +12,17 @@ export interface Env {
   AUTH_USER?: string;
   AUTH_PASS?: string;
   AUTH_TOKEN?: string;
+  MASK_SECRET?: string;
 }
 
 const app = new Hono<{ Bindings: Env }>();
 
 // Kích hoạt CORS cho mọi nguồn
 app.use('*', cors());
+
+function getMaskSecret(c: any): string {
+  return c.env.MASK_SECRET || 'vbook-opds-default-key-change-me-in-prod';
+}
 
 /**
  * Kiểm tra xác thực Basic Auth:
@@ -49,14 +55,47 @@ app.get('/', (c) => {
 });
 
 /**
+ * Endpoint API: Mã hóa Folder ID an toàn để trả về cho Web UI
+ */
+app.post('/api/mask', async (c) => {
+  try {
+    const body = await c.req.json<{ folderId?: string }>();
+    const rawInput = (body?.folderId || '').trim();
+    const folderId = extractFolderId(rawInput);
+
+    if (!folderId) {
+      return c.json({ error: 'Đường link hoặc mã thư mục Google Drive không hợp lệ' }, 400);
+    }
+
+    const secret = getMaskSecret(c);
+    const maskedId = await maskFolderId(folderId, secret);
+    return c.json({ success: true, maskedId });
+  } catch {
+    return c.json({ error: 'Lỗi xử lý mã hóa thư mục' }, 500);
+  }
+});
+
+/**
  * Endpoint OPDS Feed: Trả về XML Atom danh mục sách cho vBook
  */
 app.get('/feed/:folderId', async (c) => {
   const rawFolderId = c.req.param('folderId');
-  const folderId = extractFolderId(rawFolderId);
+  const secret = getMaskSecret(c);
 
-  if (!folderId) {
-    return c.text('Thư mục Google Drive không hợp lệ', 400);
+  let realFolderId: string | null = null;
+  let isMasked = false;
+
+  if (isMaskedId(rawFolderId)) {
+    realFolderId = await unmaskFolderId(rawFolderId, secret);
+    isMasked = true;
+    if (!realFolderId) {
+      return c.text('Đường dẫn danh mục không hợp lệ hoặc đã bị thay đổi', 400);
+    }
+  } else {
+    realFolderId = extractFolderId(rawFolderId);
+    if (!realFolderId) {
+      return c.text('Thư mục Google Drive không hợp lệ', 400);
+    }
   }
 
   // 1. Kiểm tra xác thực HTTP Basic Auth
@@ -82,23 +121,35 @@ app.get('/feed/:folderId', async (c) => {
   try {
     // 3. Lấy dữ liệu thư mục từ Google Drive
     const driveData = await fetchDriveFolder({
-      folderId,
+      folderId: realFolderId,
       apiKey,
       pageToken,
       pageSize,
     });
 
+    // Nếu đang ở chế độ ẩn ID: Tạo bảng ánh xạ masked ID cho các thư mục con để không làm lộ ID gốc
+    let subfolderIdMap: Record<string, string> | undefined = undefined;
+    if (isMasked) {
+      subfolderIdMap = {};
+      for (const item of driveData.items) {
+        if (item.isFolder) {
+          subfolderIdMap[item.id] = await maskFolderId(item.id, secret);
+        }
+      }
+    }
+
     // 4. Sinh XML Atom OPDS 1.2
     const origin = new URL(c.req.url).origin;
     const xml = buildOpdsFeed({
       feedTitle: 'Kho Sách VBook',
-      folderId,
+      folderId: rawFolderId, // Bảo toàn masked ID trên URL gốc
       items: driveData.items,
       origin,
-      currentPath: `/feed/${folderId}`,
+      currentPath: `/feed/${rawFolderId}`,
       nextPageToken: driveData.nextPageToken,
       authParam,
       apiKeyParam: c.req.query('key'),
+      subfolderIdMap,
     });
 
     const hasAuth = Boolean(authParam || c.env.AUTH_TOKEN || c.env.AUTH_USER);
@@ -124,10 +175,10 @@ app.get('/feed/:folderId', async (c) => {
 });
 
 /**
- * Endpoint OpenSearch Description:
- * Chuẩn bị sẵn đặc tả tìm kiếm OpenSearch 1.1 khi vBook cập nhật tính năng tìm kiếm OPDS
- * (Đồng thời hỗ trợ ngay cho các ứng dụng như Moon+ Reader, KOReader)
+ * OpenSearch Endpoints (Tạm thời vô hiệu hóa do app vBook chưa kích hoạt tính năng tìm kiếm OPDS.
+ * Được bảo lưu trong mã nguồn để sẵn sàng mở lại khi vBook cập nhật hỗ trợ tìm kiếm).
  */
+/*
 app.get('/feed/:folderId/opensearch.xml', (c) => {
   const rawFolderId = c.req.param('folderId');
   const folderId = extractFolderId(rawFolderId);
@@ -147,10 +198,6 @@ app.get('/feed/:folderId/opensearch.xml', (c) => {
   });
 });
 
-/**
- * Endpoint Tìm Kiếm Sách:
- * Sẵn sàng kết nối cho các bản cập nhật vBook trong tương lai
- */
 app.get('/feed/:folderId/search', async (c) => {
   const rawFolderId = c.req.param('folderId');
   const folderId = extractFolderId(rawFolderId);
@@ -159,14 +206,12 @@ app.get('/feed/:folderId/search', async (c) => {
     return c.text('Thư mục Google Drive không hợp lệ', 400);
   }
 
-  // 1. Kiểm tra xác thực HTTP Basic Auth
   if (!isAuthorized(c)) {
     return c.text('Yêu cầu xác thực tài khoản (HTTP Basic Auth)', 401, {
       'WWW-Authenticate': 'Basic realm="vBook OPDS Gateway"',
     });
   }
 
-  // 2. Xác định Google Drive API Key
   const apiKey = c.req.query('key') || c.env.GOOGLE_API_KEY;
   if (!apiKey) {
     return c.text('Lỗi: Chưa cung cấp Google Drive API Key', 400);
@@ -180,13 +225,11 @@ app.get('/feed/:folderId/search', async (c) => {
   try {
     const origin = new URL(c.req.url).origin;
 
-    // Nếu không nhập từ khóa tìm kiếm, redirect về feed chính
     if (!searchTerm) {
       const extraAuth = authParam ? `?auth=${authParam}` : '';
       return c.redirect(`${origin}/feed/${folderId}${extraAuth}`, 302);
     }
 
-    // 3. Tìm kiếm file sách trong Google Drive
     const driveData = await searchDriveFolder({
       folderId,
       apiKey,
@@ -195,7 +238,6 @@ app.get('/feed/:folderId/search', async (c) => {
       pageSize,
     });
 
-    // 4. Sinh OPDS feed chứa kết quả tìm kiếm
     const xml = buildOpdsFeed({
       feedTitle: `Tìm kiếm: "${searchTerm}"`,
       folderId,
@@ -217,6 +259,7 @@ app.get('/feed/:folderId/search', async (c) => {
     return c.text('Lỗi tìm kiếm trong thư mục Google Drive.', 500);
   }
 });
+*/
 
 /**
  * Endpoint Tải Sách: Redirect 302 sang Google Direct Download

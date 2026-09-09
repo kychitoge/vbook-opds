@@ -70,7 +70,8 @@ Tuân thủ nghiêm ngặt bảng mã màu được chỉ định:
 |   (Khi bấm Tạo đường dẫn):                                        |
 |   +-----------------------------------------------------------+   |
 |   |  URL DANH MỤC CHO VBOOK:                                  |   |
-|   |  [ https://vbook-opds.domain.com/feed/folderId          ] |   |
+|   |  [ https://vbook-opds.domain.com/feed/m_Ab3...          ] |   |
+|   |    (Tự động ẩn Folder ID bằng AES-256-GCM, bảo vệ privacy)|   |
 |   |    (Hiển thị 1 dòng, ẩn thanh cuộn, chạm tự bôi đen)      |   |
 |   |                                                           |   |
 |   |  [                SAO CHÉP LIÊN KẾT                      ] |   |

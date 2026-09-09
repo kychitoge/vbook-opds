@@ -4,6 +4,15 @@ compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
 [vars]
-# Mặc định người dùng có thể cấu hình GOOGLE_API_KEY công khai trên Worker
-# hoặc cấu hình qua wrangler secret put GOOGLE_API_KEY
+# Cấu hình biến môi trường không nhạy cảm
 DEFAULT_PAGE_SIZE = "50"
+
+# [LƯU Ý BẢO MẬT & SECRETS - KHÔNG LƯU TRỰC TIẾP VÀO FILE NÀY]:
+# Các biến nhạy cảm sau đây KHUYÊN DÙNG nạp qua lệnh terminal bí mật của Cloudflare:
+#
+# 1. Google Drive API Key:
+#    pnpm wrangler secret put GOOGLE_API_KEY
+#
+# 2. Khóa bí mật mã hóa URL ẩn danh (AES-256-GCM Privacy Shield):
+#    pnpm wrangler secret put MASK_SECRET
+

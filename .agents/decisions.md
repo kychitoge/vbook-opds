@@ -65,3 +65,21 @@ Tài liệu này ghi chép các quyết định kiến trúc then chốt của d
 - **Hệ quả**: 
   - Khớp 100% với hợp đồng hiển thị UI của vBook.
   - Bìa sách SVG trên vBook tự động nhận đúng màu sắc và in chữ định dạng chuẩn xác.
+
+---
+
+## [ADR-005] Cơ Chế Stateless URL Masking (AES-256-GCM) & Tạm Dừng OpenSearch
+- **Ngày**: 2026-09-09
+- **Phiên bản**: v1.1.0
+- **Bối cảnh**: 
+  1. Khi người dùng vô tình chia sẻ đường dẫn feed OPDS mà không đặt mật khẩu, chuỗi `folderId` thô trên URL có thể bị người khác copy để truy cập trực tiếp vào giao diện web Google Drive, làm lộ danh tính tài khoản Google (tên, avatar, email) và các file ngoài sách của chủ sở hữu.
+  2. Ứng dụng vBook hiện tại chưa kích hoạt giao diện tìm kiếm OPDS (mã nguồn client đang comment tính năng này), dẫn đến nguy cơ các endpoint tìm kiếm mở bị spam query làm cạn kiệt hạn mức 100 requests/100s của Google API Key.
+- **Quyết định**: 
+  - Triển khai module `src/crypto.ts` sử dụng thuật toán mã hóa đối xứng **AES-256-GCM** ($0 database). Chuyển đổi toàn bộ `folderId` thành chuỗi an toàn tiền tố `m_` trên URL và mã hóa toàn bộ thư mục con trong XML feed.
+  - Tích hợp tính năng chống giả mạo (Tamper-proof) qua Auth Tag.
+  - Giữ nguyên 100% bố cục giao diện Web UI, tự động sinh link ẩn ID mặc định.
+  - Tạm thời comment out các route OpenSearch `/opensearch.xml`, `/search` và thẻ `<link rel="search">` trong feed Atom.
+- **Hệ quả**: 
+  - Bảo vệ 100% quyền riêng tư và danh tính tài khoản Google của người dùng.
+  - Triệt tiêu hoàn toàn bề mặt tấn công DoS/spam search qua Google API.
+  - Duy trì chi phí hạ tầng $0 và trải nghiệm Zero-config cho người dùng.

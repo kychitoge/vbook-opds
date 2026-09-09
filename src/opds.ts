@@ -43,6 +43,7 @@ export interface BuildOpdsOptions {
   authParam?: string;
   apiKeyParam?: string;
   searchTerms?: string;
+  subfolderIdMap?: Record<string, string>;
 }
 
 /**
@@ -59,6 +60,7 @@ export function buildOpdsFeed(options: BuildOpdsOptions): string {
     authParam,
     apiKeyParam,
     searchTerms,
+    subfolderIdMap,
   } = options;
 
   const now = new Date().toISOString();
@@ -78,9 +80,10 @@ export function buildOpdsFeed(options: BuildOpdsOptions): string {
   const selfParams = searchTerms ? { q: searchTerms } : {};
   const selfUrl = `${origin}${currentPath}${buildSubParams(selfParams)}`;
   const startUrl = `${origin}/feed/${folderId}${buildSubParams()}`;
-  
-  // Link OpenSearch Description phục vụ tìm kiếm (chuẩn bị sẵn cho các phiên bản vBook tương lai và OPDS reader khác)
-  const searchUrl = `${origin}/feed/${folderId}/opensearch.xml${buildSubParams()}`;
+
+  // OpenSearch link tạm thời vô hiệu hóa do vBook chưa kích hoạt tính năng tìm kiếm OPDS.
+  // Giữ lại cấu trúc để sẵn sàng mở lại khi app vBook ra mắt tính năng tìm kiếm:
+  // const searchUrl = `${origin}/feed/${folderId}/opensearch.xml${buildSubParams()}`;
 
   let nextLinkXml = '';
   if (nextPageToken) {
@@ -96,9 +99,11 @@ export function buildOpdsFeed(options: BuildOpdsOptions): string {
 
       if (item.isFolder) {
         // KỊCH BẢN 1: Thư mục con (Navigation Entry cho vBook)
-        const subFolderUrl = `${origin}/feed/${item.id}${buildSubParams()}`;
+        // Nếu có subfolderIdMap (chế độ ẩn ID), sử dụng masked ID để không làm lộ Google Drive ID
+        const subFolderRef = (subfolderIdMap && subfolderIdMap[item.id]) || item.id;
+        const subFolderUrl = `${origin}/feed/${subFolderRef}${buildSubParams()}`;
         return `  <entry>
-    <id>urn:vbook:folder:${item.id}</id>
+    <id>urn:vbook:folder:${subFolderRef}</id>
     <title>${escapeXml(item.name)}</title>
     <updated>${updated}</updated>
     <summary>Thư mục: ${escapeXml(item.name)}</summary>
@@ -106,7 +111,7 @@ export function buildOpdsFeed(options: BuildOpdsOptions): string {
   </entry>`;
       } else {
         // KỊCH BẢN 2: Tệp sách (Acquisition Entry cho vBook)
-        // Giữ nguyên 100% tên file gốc có đuôi để vBook (j12.c, uya.a) tự vẽ bìa SVG tô màu theo định dạng và in badge format.
+        // Giữ nguyên 100% tên file gốc có đuôi để vBook tự vẽ bìa SVG tô màu theo định dạng và in badge format.
         // Tuyệt đối không đoán mò tác giả để tránh làm hỏng tên sách.
         const displayTitle = cleanBookTitle(item.name);
         const bookMime = item.bookMimeType || 'application/epub+zip';
@@ -136,8 +141,6 @@ export function buildOpdsFeed(options: BuildOpdsOptions): string {
   <updated>${now}</updated>
   <link rel="self" href="${escapeXml(selfUrl)}" type="application/atom+xml;profile=opds-catalog"/>
   <link rel="start" href="${escapeXml(startUrl)}" type="application/atom+xml;profile=opds-catalog"/>
-  <!-- OpenSearch link: Tương thích chuẩn OPDS 1.2, sẵn sàng cho các phiên bản vBook tương lai hỗ trợ search -->
-  <link rel="search" href="${escapeXml(searchUrl)}" type="application/opensearchdescription+xml" title="Tìm kiếm sách"/>
 ${nextLinkXml}${entriesXml}
 </feed>`;
 }

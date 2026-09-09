@@ -1,6 +1,7 @@
 import { extractFolderId, detectBookMimeType } from '../src/drive';
 import { buildOpdsFeed, buildOpenSearchDescription, cleanBookTitle } from '../src/opds';
 import { verifyBasicAuth, createAuthToken, parseBasicAuthHeader } from '../src/auth';
+import { maskFolderId, unmaskFolderId, isMaskedId } from '../src/crypto';
 
 function assert(condition: boolean, msg: string) {
   if (!condition) {
@@ -8,7 +9,8 @@ function assert(condition: boolean, msg: string) {
   }
 }
 
-console.log('--- 1. Kiểm tra trích xuất Folder ID & File ID an toàn ---');
+async function runAllTests() {
+  console.log('--- 1. Kiểm tra trích xuất Folder ID & File ID an toàn ---');
 assert(
   extractFolderId('https://drive.google.com/drive/folders/1aBcDeFgHiJkLmNoPqRsTuVwXyZ') ===
     '1aBcDeFgHiJkLmNoPqRsTuVwXyZ',
@@ -114,7 +116,7 @@ assert(xmlWithAuth.includes('<link rel="subsection" href="https://opds.test.com/
 assert(xmlWithAuth.includes('<link rel="http://opds-spec.org/acquisition" href="https://opds.test.com/download/book_1?auth=dmJvb2s6c2VjcmV0MTIz" type="application/epub+zip"/>'), 'Download link kế thừa auth param');
 assert(xmlWithAuth.includes('<title>Pham Nhan Tu Tien - Vong Ngu.epub</title>'), 'Title bảo toàn đuôi file để vBook render bìa SVG và badge format');
 assert(!xmlWithAuth.includes('<author>'), 'Không có thẻ author đoán mò');
-assert(xmlWithAuth.includes('<link rel="search" href="https://opds.test.com/feed/rootFolder123/opensearch.xml?auth=dmJvb2s6c2VjcmV0MTIz" type="application/opensearchdescription+xml" title="Tìm kiếm sách"/>'), 'Thẻ OpenSearch link trong root feed');
+assert(!xmlWithAuth.includes('<link rel="search" href='), 'Thẻ OpenSearch link đã tạm vô hiệu hóa theo yêu cầu');
 
 // 4.2. Trường hợp feed công khai không cài auth
 const xmlPublic = buildOpdsFeed({
@@ -127,7 +129,7 @@ const xmlPublic = buildOpdsFeed({
 assert(!xmlPublic.includes('auth='), 'Feed công khai sạch link hoàn toàn không có auth param');
 console.log('✓ Passed 4. OPDS XML Builder Contract & Auth inheritance');
 
-console.log('--- 5. Kiểm tra OpenSearch Description Builder ---');
+console.log('--- 5. Kiểm tra OpenSearch Description Builder (Bảo lưu cho tương lai) ---');
 const openSearchXml = buildOpenSearchDescription('https://opds.test.com', 'folder123', 'API_KEY_VAL', 'TOKEN123');
 assert(openSearchXml.includes('<OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">'), 'Root OpenSearchDescription tag');
 assert(openSearchXml.includes('template="https://opds.test.com/feed/folder123/search?q={searchTerms}&amp;key=API_KEY_VAL&amp;auth=TOKEN123"'), 'Search URL template kế thừa key và auth');
@@ -145,6 +147,52 @@ assert(credentials !== null && credentials.user === 'vbook' && credentials.pass 
 assert(parseBasicAuthHeader('InvalidHeader') === null, 'Header không hợp lệ trả về null');
 console.log('✓ Passed 6. Basic Auth Verification & Header Parser');
 
-console.log('\n=========================================');
-console.log('TẤT CẢ 6 BỘ KIỂM THỬ ĐỀU ĐẠT CHUẨN 100%!');
-console.log('=========================================');
+console.log('--- 7. Kiểm tra Stateless URL Masking (AES-256-GCM) & Chống Giả Mạo ---');
+const secret = 'test-secret-key-12345';
+const rawFolderId = '1aBcDeFgHiJkLmNoPqRsTuVwXyZ123456';
+
+// 7.1. Mã hóa và giải mã thành công
+const masked = await maskFolderId(rawFolderId, secret);
+assert(isMaskedId(masked) === true, 'Mã hóa sinh tiền tố m_');
+assert(masked.startsWith('m_'), 'Tiền tố m_');
+
+const unmasked = await unmaskFolderId(masked, secret);
+assert(unmasked === rawFolderId, 'Giải mã chính xác 100% Folder ID ban đầu');
+
+// 7.2. Chống giả mạo (Tamper-proof): Sửa ký tự trong chuỗi mã hóa
+const tampered = masked.slice(0, -3) + 'XYZ';
+const tamperedResult = await unmaskFolderId(tampered, secret);
+assert(tamperedResult === null, 'Chuỗi bị can thiệp sẽ bị Auth Tag từ chối giải mã (null)');
+
+// 7.3. Sai Secret Key
+const wrongSecretResult = await unmaskFolderId(masked, 'wrong-secret-key-9999');
+assert(wrongSecretResult === null, 'Sai secret key không thể giải mã (null)');
+
+// 7.4. Kiểm tra che giấu ID thư mục con trong XML feed (subfolderIdMap)
+const subfolderMaskedId = await maskFolderId('subfolder_1', secret);
+const xmlMasked = buildOpdsFeed({
+  feedTitle: 'Kho Sách Ẩn ID',
+  folderId: masked,
+  origin: 'https://opds.test.com',
+  currentPath: `/feed/${masked}`,
+  items,
+  subfolderIdMap: {
+    subfolder_1: subfolderMaskedId,
+  },
+});
+
+assert(xmlMasked.includes(`<id>urn:vbook:feed:${masked}</id>`), 'Root feed id dùng masked id');
+assert(xmlMasked.includes(`<id>urn:vbook:folder:${subfolderMaskedId}</id>`), 'Thư mục con dùng masked id');
+assert(xmlMasked.includes(`href="https://opds.test.com/feed/${subfolderMaskedId}"`), 'Link thư mục con dùng masked id');
+assert(!xmlMasked.includes('subfolder_1'), 'Tuyệt đối không lộ ID thật subfolder_1 trong XML');
+console.log('✓ Passed 7. Stateless URL Masking & Tamper-proof');
+
+  console.log('\n=========================================');
+  console.log('TẤT CẢ 7 BỘ KIỂM THỬ ĐỀU ĐẠT CHUẨN 100%!');
+  console.log('=========================================');
+}
+
+runAllTests().catch((err) => {
+  console.error('Test Suite Failed:', err);
+  process.exit(1);
+});
