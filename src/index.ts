@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { fetchDriveFolder, extractFolderId } from './drive';
-import { buildOpdsFeed } from './opds';
+import { fetchDriveFolder, extractFolderId, searchDriveFolder } from './drive';
+import { buildOpdsFeed, buildOpenSearchDescription } from './opds';
 import { verifyBasicAuth, createAuthToken } from './auth';
 import { maskFolderId, unmaskFolderId, isMaskedId } from './crypto';
 import { renderHtmlPage } from './ui';
@@ -175,22 +175,30 @@ app.get('/feed/:folderId', async (c) => {
 });
 
 /**
- * OpenSearch Endpoints (Tạm thời vô hiệu hóa do app vBook chưa kích hoạt tính năng tìm kiếm OPDS.
- * Được bảo lưu trong mã nguồn để sẵn sàng mở lại khi vBook cập nhật hỗ trợ tìm kiếm).
+ * OpenSearch Endpoints (Chuẩn vBook & OPDS 1.1)
+ * Hỗ trợ tìm kiếm cho cả Folder ID thô lẫn Folder ID ẩn danh m_... (AES-256-GCM)
  */
-/*
-app.get('/feed/:folderId/opensearch.xml', (c) => {
+app.get('/feed/:folderId/opensearch.xml', async (c) => {
   const rawFolderId = c.req.param('folderId');
-  const folderId = extractFolderId(rawFolderId);
+  const secret = getMaskSecret(c);
+  let realFolderId: string | null = null;
 
-  if (!folderId) {
-    return c.text('Thư mục Google Drive không hợp lệ', 400);
+  if (isMaskedId(rawFolderId)) {
+    realFolderId = await unmaskFolderId(rawFolderId, secret);
+    if (!realFolderId) {
+      return c.text('Đường dẫn danh mục không hợp lệ hoặc đã bị thay đổi', 400);
+    }
+  } else {
+    realFolderId = extractFolderId(rawFolderId);
+    if (!realFolderId) {
+      return c.text('Thư mục Google Drive không hợp lệ', 400);
+    }
   }
 
   const origin = new URL(c.req.url).origin;
   const apiKeyParam = c.req.query('key');
   const authParam = c.req.query('auth');
-  const xml = buildOpenSearchDescription(origin, folderId, apiKeyParam, authParam);
+  const xml = buildOpenSearchDescription(origin, rawFolderId, apiKeyParam, authParam);
 
   return c.text(xml, 200, {
     'Content-Type': 'application/opensearchdescription+xml;charset=utf-8',
@@ -200,10 +208,21 @@ app.get('/feed/:folderId/opensearch.xml', (c) => {
 
 app.get('/feed/:folderId/search', async (c) => {
   const rawFolderId = c.req.param('folderId');
-  const folderId = extractFolderId(rawFolderId);
+  const secret = getMaskSecret(c);
+  let realFolderId: string | null = null;
+  let isMasked = false;
 
-  if (!folderId) {
-    return c.text('Thư mục Google Drive không hợp lệ', 400);
+  if (isMaskedId(rawFolderId)) {
+    realFolderId = await unmaskFolderId(rawFolderId, secret);
+    isMasked = true;
+    if (!realFolderId) {
+      return c.text('Đường dẫn danh mục không hợp lệ hoặc đã bị thay đổi', 400);
+    }
+  } else {
+    realFolderId = extractFolderId(rawFolderId);
+    if (!realFolderId) {
+      return c.text('Thư mục Google Drive không hợp lệ', 400);
+    }
   }
 
   if (!isAuthorized(c)) {
@@ -227,39 +246,55 @@ app.get('/feed/:folderId/search', async (c) => {
 
     if (!searchTerm) {
       const extraAuth = authParam ? `?auth=${authParam}` : '';
-      return c.redirect(`${origin}/feed/${folderId}${extraAuth}`, 302);
+      return c.redirect(`${origin}/feed/${rawFolderId}${extraAuth}`, 302);
     }
 
     const driveData = await searchDriveFolder({
-      folderId,
+      folderId: realFolderId,
       apiKey,
       searchTerm,
       pageToken,
       pageSize,
     });
 
+    // Nếu đang ở chế độ ẩn ID: Mã hóa các thư mục con trong kết quả tìm kiếm
+    let subfolderIdMap: Record<string, string> | undefined = undefined;
+    if (isMasked) {
+      subfolderIdMap = {};
+      for (const item of driveData.items) {
+        if (item.isFolder) {
+          subfolderIdMap[item.id] = await maskFolderId(item.id, secret);
+        }
+      }
+    }
+
     const xml = buildOpdsFeed({
       feedTitle: `Tìm kiếm: "${searchTerm}"`,
-      folderId,
+      folderId: rawFolderId,
       items: driveData.items,
       origin,
-      currentPath: `/feed/${folderId}/search`,
+      currentPath: `/feed/${rawFolderId}/search`,
       nextPageToken: driveData.nextPageToken,
       authParam,
       apiKeyParam: c.req.query('key'),
       searchTerms: searchTerm,
+      subfolderIdMap,
     });
+
+    // Chống Spam API Quota: Nếu feed công khai, áp dụng Edge Cache 30s để giảm tải Google API
+    const cacheHeader = authParam
+      ? 'private, no-cache, no-store, must-revalidate'
+      : 'public, max-age=30, s-maxage=30';
 
     return c.text(xml, 200, {
       'Content-Type': 'application/atom+xml;profile=opds-catalog;charset=utf-8',
-      'Cache-Control': 'private, no-cache, no-store, must-revalidate',
+      'Cache-Control': cacheHeader,
     });
   } catch (error: any) {
     console.error('Lỗi tìm kiếm Drive:', error);
     return c.text('Lỗi tìm kiếm trong thư mục Google Drive.', 500);
   }
 });
-*/
 
 /**
  * Endpoint Tải Sách: Redirect 302 sang Google Direct Download

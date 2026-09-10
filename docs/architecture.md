@@ -1,4 +1,4 @@
-# Kiến Trúc Hệ Thống: VBook OPDS Gateway (Cloud-to-OPDS) - v1.1.0
+# Kiến Trúc Hệ Thống: VBook OPDS Gateway (Cloud-to-OPDS) - v1.2.0
 
 ## 1. Bối Cảnh & Mục Tiêu
 
@@ -21,7 +21,7 @@
 |                  | <-------|   - Parser & Atom XML Builder           | <-------|                       |
 |                  |  (3)    |   - Basic Auth Verifier                 |         |                       |
 +------------------+         |   - Subfolder Masking Transformer       |         +-----------------------+
-        |                    |   - OpenSearch (Tạm tắt theo client)    |
+        |                    |   - Native OpenSearch Engine ({search}) |
         |                    |   - 302 Redirect Handler                |
         |                    +-----------------------------------------+
         |                                   
@@ -48,8 +48,11 @@
    - Gateway kiểm tra Regex an toàn cho `fileId` chống Injection / Open Redirect.
    - Gateway trả về mã `HTTP 302 Found` (Redirect) trỏ thẳng sang URL tải trực tiếp của Google (`https://drive.google.com/uc?export=download&id=:fileId`).
    - Băng thông tải sách đi trực tiếp giữa Google và thiết bị người dùng. Gateway tiêu tốn 0 MB băng thông lưu trữ và không làm lộ Google API Key.
-5. **Tìm kiếm sách (OpenSearch Protocol):**
-   - *Trạng thái v1.1.0:* Tạm thời vô hiệu hóa (commented out) cả route và thẻ link trong feed XML do client vBook hiện tại chưa kích hoạt tính năng tìm kiếm OPDS. Codebase được bảo tồn sẵn sàng kích hoạt lại khi vBook mở khóa tính năng.
+5. **Tìm kiếm sách (vBook Native OpenSearch Protocol):**
+   - *Trạng thái v1.2.0:* Kích hoạt chính thức theo đúng bytecode vBook mới.
+   - Gateway nhúng trực tiếp URL template vào feed Atom: `<link rel="search" href="/feed/{folderId}/search?q={searchTerms}" .../>`.
+   - vBook client thay `{searchTerms}` bằng từ khóa encode RFC-3986 và gửi request tới `/feed/:folderId/search`.
+   - Gateway giải mã `folderId` (hỗ trợ cả ID ẩn `m_...`), truy vấn Google Drive API (`name contains '...'`), bảo toàn token xác thực `authParam` và phân trang kết quả `rel="next"`.
 
 ---
 

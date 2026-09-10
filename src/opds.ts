@@ -81,9 +81,12 @@ export function buildOpdsFeed(options: BuildOpdsOptions): string {
   const selfUrl = `${origin}${currentPath}${buildSubParams(selfParams)}`;
   const startUrl = `${origin}/feed/${folderId}${buildSubParams()}`;
 
-  // OpenSearch link tạm thời vô hiệu hóa do vBook chưa kích hoạt tính năng tìm kiếm OPDS.
-  // Giữ lại cấu trúc để sẵn sàng mở lại khi app vBook ra mắt tính năng tìm kiếm:
-  // const searchUrl = `${origin}/feed/${folderId}/opensearch.xml${buildSubParams()}`;
+  // vBook Native OpenSearch Contract:
+  // vBook đọc rel="search" và trực tiếp thay thế token {searchTerms} bằng từ khóa encode RFC-3986
+  const baseSubParams = buildSubParams();
+  const searchExtra = baseSubParams ? `&${baseSubParams.slice(1)}` : '';
+  const searchTemplate = `${origin}/feed/${folderId}/search?q={searchTerms}${searchExtra}`;
+  const searchLinkXml = `  <link rel="search" href="${escapeXml(searchTemplate)}" type="application/atom+xml;profile=opds-catalog" title="Tìm kiếm sách"/>\n`;
 
   let nextLinkXml = '';
   if (nextPageToken) {
@@ -141,7 +144,7 @@ export function buildOpdsFeed(options: BuildOpdsOptions): string {
   <updated>${now}</updated>
   <link rel="self" href="${escapeXml(selfUrl)}" type="application/atom+xml;profile=opds-catalog"/>
   <link rel="start" href="${escapeXml(startUrl)}" type="application/atom+xml;profile=opds-catalog"/>
-${nextLinkXml}${entriesXml}
+${searchLinkXml}${nextLinkXml}${entriesXml}
 </feed>`;
 }
 

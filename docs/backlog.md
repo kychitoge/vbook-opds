@@ -81,7 +81,37 @@ Dự án được quản lý theo chuẩn SemVer và nguyên tắc Dao cạo Ock
 
 ---
 
-## Milestone 7: Minor v1.2.0 (Google Service Account - Zero Public Link) [Dự Kiến]
-- [ ] **M7.1**: Hỗ trợ kết nối Google Service Account (`credentials.json` / private key RS256).
-- [ ] **M7.2**: Đọc thư mục Google Drive hoàn toàn đóng (100% Private, không bật public link).
-- [ ] **M7.3**: Proxy stream có kiểm soát bộ nhớ đệm cho các file sách Private không thể 302 Redirect.
+## Milestone 7: Google Service Account & 100% Private Drive [ĐÃ HỦY BỎ - WON'T DO]
+> **Quyết định ngày 2026-09-10 (Xem ADR-006)**: 
+> Chính thức bãi bỏ Milestone 7 nhằm bảo vệ **Trải nghiệm người dùng (UX) tối thượng** và giữ vững **Chi phí hạ tầng $0**.
+> - **Lý do UX**: Đòi hỏi người dùng trải qua 7 bước phức tạp trên Google Cloud Console (tạo IAM, tải key JSON, share folder).
+> - **Lý do Kỹ thuật**: Private Drive buộc Worker phải proxy stream nội dung file thay vì 302 Redirect, làm cạn kiệt tài nguyên CPU/băng thông miễn phí của Cloudflare Worker khi tải sách dung lượng lớn.
+> - **Thay thế**: Bản v1.1.0 với **Stateless URL Masking (AES-256-GCM)** đã bảo vệ 100% danh tính và thư mục con mà chỉ cần 1 thao tác dán link đơn giản.
+
+---
+
+## Milestone 8: Minor v1.2.0 (vBook Native OpenSearch Engine & Chuẩn Hóa MIME Types)
+- [x] **M8.1**: **Kích hoạt vBook Search Contract**:
+  - Nhúng trực tiếp URL template vào feed root: `<link rel="search" href="/feed/{folderId}/search?q={searchTerms}" type="application/atom+xml;profile=opds-catalog"/>`.
+  - Endpoint `/feed/:folderId/search?q=...` hỗ trợ cả `folderId` thô và ID ẩn `m_...` (AES-GCM).
+  - Tìm kiếm Google Drive API: `name contains '${q}'` và phân trang `rel="next"`.
+- [x] **M8.2**: **Mở rộng & Khớp 100% MIME Type Matrix của vBook**:
+  - Bổ sung định dạng Kindle: `.azw` (`application/vnd.amazon.ebook`), `.azw3` (`application/vnd.amazon.mobi8-ebook`), `.prc` (`application/x-mobipocket-ebook`).
+  - Bổ sung định dạng tài liệu văn phòng: `.docx` (`application/vnd.openxmlformats-officedocument.wordprocessingml.document`), `.doc` (`application/msword`).
+  - Chuẩn hóa lại MIME Comic & FictionBook theo parser vBook:
+    + `.cbr` $\rightarrow$ `application/vnd.comicbook-rar` (thay vì bị gán nhầm sang `comicbook+zip`).
+    + `.fb2` $\rightarrow$ `application/x-fictionbook+xml`.
+    + `.fb2.zip` $\rightarrow$ `application/x-zip-compressed-fb2`.
+  - Hỗ trợ kho lưu trữ truyện nén `.zip` (`application/zip`).
+- [x] **M8.3**: Nâng cấp bộ kiểm thử tự động lên 8 test suites đạt 100% qua `pnpm test` và `pnpm run build`.
+
+---
+
+## Milestone 9: Minor v1.3.0 (Rich Metadata & OPDS 2.0 JSON Content Negotiation)
+- [ ] **M9.1**: **Metadata phong phú cho Entry**:
+  - Bổ sung thẻ `<category term="..." label="..."/>` hiển thị thể loại/tags trên vBook.
+  - Dự phòng `<content>` nếu `<summary>` trống.
+- [ ] **M9.2**: **Hỗ trợ OPDS 2.0 JSON (`application/opds+json`)**:
+  - Cơ chế Content Negotiation: Khi vBook gửi header `Accept: application/opds+json`, Gateway trả về JSON chuẩn OPDS 2.0 (`Opds2Feed`: metadata, links, navigation, publications).
+  - Phản hồi siêu nhẹ, bỏ qua tầng serialize XML, giảm tối đa dung lượng response trên Cloudflare Worker.
+

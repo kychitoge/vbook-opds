@@ -83,3 +83,42 @@ Tài liệu này ghi chép các quyết định kiến trúc then chốt của d
   - Bảo vệ 100% quyền riêng tư và danh tính tài khoản Google của người dùng.
   - Triệt tiêu hoàn toàn bề mặt tấn công DoS/spam search qua Google API.
   - Duy trì chi phí hạ tầng $0 và trải nghiệm Zero-config cho người dùng.
+
+---
+
+## [ADR-006] Bãi Bỏ Đề Xuất Google Service Account & Bảo Vệ Triết Lý UX Số 1
+- **Ngày**: 2026-09-10
+- **Phiên bản**: v1.1.0+
+- **Bối cảnh**: 
+  Ý tưởng tích hợp Google Service Account để đọc Google Drive hoàn toàn đóng (100% Private, không cần bật public link) được cân nhắc cho Milestone 7. Tuy nhiên, việc áp dụng Service Account đòi hỏi người dùng phải thao tác 7 bước phức tạp trên Google Cloud Console (tạo IAM, tải key JSON, share folder). Đồng thời, Drive Private khiến Gateway không thể dùng cơ chế 302 Redirect sang Google CDN mà buộc phải proxy stream nội dung file qua Worker, làm cạn kiệt CPU Time và băng thông của Cloudflare Workers Free-Tier khi tải file sách lớn (EPUB/PDF/CBZ).
+- **Quyết định**: 
+  - Chính thức bãi bỏ (Won't Do) ý tưởng tích hợp Google Service Account.
+  - Khẳng định giải pháp **Stateless URL Masking (AES-256-GCM)** tại bản v1.1.0 là giải pháp tối ưu toàn diện: Bảo vệ 100% danh tính tài khoản Google của người dùng mà chỉ đòi hỏi duy nhất 1 thao tác dán link đơn giản.
+  - Tiếp tục tận dụng HTTP 302 Redirect trực tiếp đến Google CDN để duy trì tốc độ tải tức thì và chi phí hạ tầng $0.
+- **Hệ quả**: 
+  - Bảo toàn trải nghiệm người dùng tối giản (1-click generation).
+  - Codebase không bị phình to (Zero over-engineering).
+  - Không phát sinh nguy cơ nghẽn CPU và vượt hạn mức Cloudflare Workers.
+
+---
+
+## [ADR-007] vBook Native OpenSearch Direct URL Template & Chuẩn Hóa Ma Trận MIME Types
+- **Ngày**: 2026-09-10
+- **Phiên bản**: v1.2.0
+- **Bối cảnh**: 
+  1. Qua dịch ngược byte-code ứng dụng vBook mới (`vBook.apk` - class `tk9.java` và `nk9.java`), tính năng tìm kiếm OPDS đã được vBook kích hoạt chính thức. Tuy nhiên, thay vì tải tài liệu mô tả XML trung gian `opensearch.xml` theo chuẩn A9 truyền thống, vBook trích xuất trực tiếp thuộc tính `href` từ thẻ `<link rel="search">` trong feed Atom và thay thế token `{searchTerms}` bằng từ khóa tìm kiếm encode RFC-3986.
+  2. Bóc tách hàm phân tích acquisition link của vBook (`tk9.f`) phát hiện vBook hỗ trợ một dải định dạng rộng hơn nhiều so với phiên bản Gateway trước đó, bao gồm Kindle (`.azw`, `.azw3`, `.prc`), tài liệu Office (`.docx`, `.doc`), kho nén (`.zip`), đồng thời parser vBook kỳ vọng MIME type chính xác là `application/vnd.comicbook-rar` cho `.cbr` và `application/x-fictionbook+xml` cho `.fb2`.
+- **Quyết định**: 
+  - **Native OpenSearch Contract**:
+    - Nhúng trực tiếp thẻ `<link rel="search" href="/feed/{folderId}/search?q={searchTerms}" type="application/atom+xml;profile=opds-catalog" .../>` vào root feed Atom.
+    - Kích hoạt endpoint `/feed/:folderId/search` hỗ trợ tìm kiếm cho cả Folder ID thô lẫn Folder ID ẩn danh `m_...` (AES-256-GCM) và bảo toàn tính toàn vẹn xác thực Basic Auth qua mọi cấp liên kết.
+    - Tích hợp phân trang `rel="next"` cho kết quả tìm kiếm để kích hoạt cuộn vô tận (Infinite scroll) trên màn hình Search của vBook.
+  - **Mở Rộng & Chuẩn Hóa Ma Trận MIME Types**:
+    - Bổ sung nhận diện `.azw`, `.azw3`, `.prc`, `.docx`, `.doc`, `.zip`.
+    - Chuẩn hóa lại MIME type của `.cbr` sang `application/vnd.comicbook-rar` và `.fb2` sang `application/x-fictionbook+xml`, `.fb2.zip` sang `application/x-zip-compressed-fb2` khớp 100% với mã nguồn client vBook.
+- **Hệ quả**: 
+  - vBook tự động nhận diện thanh tìm kiếm và thực thi tìm kiếm tức thì mà không gặp bất kỳ lỗi xung đột URL nào.
+  - Mở rộng kho sách cá nhân của người dùng sang mọi định dạng ebook và tài liệu phổ biến mà vBook có thể đọc được.
+  - Tiếp tục bảo vệ 100% danh tính và duy trì chi phí hạ tầng $0 trên Cloudflare Workers.
+
+

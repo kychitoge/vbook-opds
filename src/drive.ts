@@ -48,25 +48,56 @@ export function extractFolderId(input: string): string | null {
 export function detectBookMimeType(fileName: string, mimeType: string): string | null {
   const lowerName = fileName.toLowerCase();
 
+  // EPUB
   if (lowerName.endsWith('.epub') || mimeType === 'application/epub+zip') {
     return 'application/epub+zip';
   }
+  // CBZ
   if (lowerName.endsWith('.cbz') || mimeType === 'application/vnd.comicbook+zip') {
     return 'application/vnd.comicbook+zip';
   }
+  // CBR (Khớp chuẩn parser vBook: application/vnd.comicbook-rar)
+  if (lowerName.endsWith('.cbr') || mimeType === 'application/vnd.comicbook-rar') {
+    return 'application/vnd.comicbook-rar';
+  }
+  // PDF
   if (lowerName.endsWith('.pdf') || mimeType === 'application/pdf') {
     return 'application/pdf';
   }
-  if (lowerName.endsWith('.mobi') || mimeType === 'application/x-mobipocket-ebook') {
+  // MOBI / PRC
+  if (lowerName.endsWith('.mobi') || lowerName.endsWith('.prc') || mimeType === 'application/x-mobipocket-ebook') {
     return 'application/x-mobipocket-ebook';
   }
-  if (lowerName.endsWith('.cbr') || mimeType === 'application/vnd.comicbook-rar') {
-    return 'application/vnd.comicbook+zip';
+  // AZW (Kindle)
+  if (lowerName.endsWith('.azw') || mimeType === 'application/vnd.amazon.ebook') {
+    return 'application/vnd.amazon.ebook';
   }
-  if (lowerName.endsWith('.fb2') || lowerName.endsWith('.fb2.zip')) {
-    return 'application/fb2+xml';
+  // AZW3 (Kindle KF8)
+  if (lowerName.endsWith('.azw3') || mimeType === 'application/vnd.amazon.mobi8-ebook') {
+    return 'application/vnd.amazon.mobi8-ebook';
   }
-  if (lowerName.endsWith('.txt')) {
+  // FB2.ZIP
+  if (lowerName.endsWith('.fb2.zip') || mimeType === 'application/x-zip-compressed-fb2') {
+    return 'application/x-zip-compressed-fb2';
+  }
+  // FB2 (Khớp chuẩn parser vBook: application/x-fictionbook+xml)
+  if (lowerName.endsWith('.fb2') || mimeType === 'application/x-fictionbook+xml') {
+    return 'application/x-fictionbook+xml';
+  }
+  // DOCX
+  if (lowerName.endsWith('.docx') || mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+    return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  }
+  // DOC
+  if (lowerName.endsWith('.doc') || mimeType === 'application/msword') {
+    return 'application/msword';
+  }
+  // ZIP (Truyện nén)
+  if (lowerName.endsWith('.zip') || mimeType === 'application/zip') {
+    return 'application/zip';
+  }
+  // TXT
+  if (lowerName.endsWith('.txt') || mimeType === 'text/plain') {
     return 'text/plain';
   }
 

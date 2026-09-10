@@ -36,8 +36,8 @@ Phản hồi từ Gateway bắt buộc phải là XML Atom với root element `<
   <!-- Phân trang (Pagination): vBook tìm kiếm rel="next" để kích hoạt cuộn vô tận (Infinite Scroll) -->
   <link rel="next" href="{nextPageUrl}" type="application/atom+xml;profile=opds-catalog"/>
 
-  <!-- OpenSearch 1.1 Descriptor: Tạm thời vô hiệu hóa ở v1.1.0 theo trạng thái client vBook hiện tại -->
-  <!-- <link rel="search" href="{searchUrl}" type="application/opensearchdescription+xml" title="Tìm kiếm sách"/> -->
+  <!-- vBook Native OpenSearch: Nhúng trực tiếp URL Template chứa {searchTerms} -->
+  <link rel="search" href="{searchUrlTemplate}" type="application/atom+xml;profile=opds-catalog" title="Tìm kiếm sách"/>
 
   <!-- Danh sách các Entry (Thư mục con hoặc Sách) -->
   ...
@@ -80,26 +80,66 @@ vBook phân tích từng thẻ `<entry>` theo 2 kịch bản phân nhánh rõ r�
     + ⚠️ Nếu gọt bỏ đuôi file trong `<title>`, vBook sẽ không nhận diện được định dạng trên kệ sách, khiến bìa sách biến thành màu xám mặc định và mất huy hiệu format!
   - Tuyệt đối không cố đoán tác giả bằng regex để tránh cắt xén làm hỏng tên sách.
 * **MIME Types & Nhãn tải sách (Download Badge) trên vBook:**
-  Trong giao diện chọn tải sách, vBook tự động nhận diện huy hiệu định dạng dựa trên **thuộc tính `type` của acquisition link**:
+  Trong giao diện chọn tải sách, vBook tự động nhận diện huy hiệu định dạng dựa trên **thuộc tính `type` của acquisition link** (khớp chính xác theo bytecode `tk9.java`):
   - `application/epub+zip` $\rightarrow$ Nhãn: **`EPUB`**
   - `application/pdf` $\rightarrow$ Nhãn: **`PDF`**
   - `application/vnd.comicbook+zip` $\rightarrow$ Nhãn: **`CBZ`**
-  - `application/x-mobipocket-ebook` $\rightarrow$ Nhãn: **`MOBI`**
+  - `application/vnd.comicbook-rar` $\rightarrow$ Nhãn: **`CBR`**
+  - `application/x-mobipocket-ebook` $\rightarrow$ Nhãn: **`MOBI`** (hoặc `.prc`)
+  - `application/vnd.amazon.ebook` $\rightarrow$ Nhãn: **`AZW`**
+  - `application/vnd.amazon.mobi8-ebook` $\rightarrow$ Nhãn: **`AZW3`**
+  - `application/x-fictionbook+xml` $\rightarrow$ Nhãn: **`FB2`**
+  - `application/x-zip-compressed-fb2` $\rightarrow$ Nhãn: **`FB2`** (sách nén `fb2.zip`)
+  - `application/vnd.openxmlformats-officedocument.wordprocessingml.document` $\rightarrow$ Nhãn: **`DOCX`**
+  - `application/msword` $\rightarrow$ Nhãn: **`DOC`**
+  - `application/zip` $\rightarrow$ Nhãn: **`ZIP`**
+  - `text/plain` $\rightarrow$ Nhãn: **`TXT`**
 * **Tác giả (Author):**
-  - Trong chuẩn Atom OPDS, thẻ `<author>` là **Optional**. Nếu không có metadata chính xác từ file, bỏ qua thẻ này (vBook coi tác giả là `null` hợp lệ, không gây lỗi).
+  - Trong chuẩn Atom OPDS, thẻ `<author>` là **Optional**. Nếu không có metadata chính xác từ file, bỏ qua thẻ này (vBook coi tác giả là `null` hợp lệ, không gây lỗi). Nếu có nhiều tác giả, vBook tự động ghép bằng dấu phẩy `, `.
 * **Ảnh bìa sách (Cover Image):**
-  - Chỉ chèn thẻ `rel="http://opds-spec.org/image"` khi Google Drive thực sự có `thumbnailLink`. Nếu không có, vBook tự động vẽ bìa SVG tô màu theo định dạng sách như mô tả ở trên.
+  - vBook tìm thẻ link có `rel="http://opds-spec.org/image"` hoặc `rel="http://opds-spec.org/image/thumbnail"`. Nếu không có, vBook tự động vẽ bìa SVG tô màu theo định dạng sách dựa trên đuôi file trong thẻ `<title>`.
 * **Tải sách (Acquisition Link):**
   - Trỏ về `/download/{fileId}`. Gateway trả về HTTP 302 chuyển hướng an toàn về máy chủ Google CDN, không làm lộ Google API Key.
+* **Hỗ trợ nhiều định dạng tải trên 1 Entry**:
+  - vBook cho phép một `<entry>` chứa nhiều link `rel="http://opds-spec.org/acquisition"` với các `type` khác nhau. Khi người dùng bấm tải, vBook sẽ hiển thị hộp thoại chọn định dạng (EPUB, PDF, MOBI...).
 
 ```xml
 <entry>
   <id>urn:vbook:book:{fileId}</id>
   <title>Dấu Ấn Rồng Thiêng - Tập 1.cbz</title>
-  <updated>2026-09-09T00:00:00Z</updated>
-  <summary>Dau An Rong Thieng - Tap 1.cbz</summary>
+  <updated>2026-09-10T00:00:00Z</updated>
+  <summary>Dấu Ấn Rồng Thiêng - Tập 1.cbz</summary>
   
   <!-- Link tải sách (Acquisition) -->
   <link rel="http://opds-spec.org/acquisition" href="/download/{fileId}?auth={token}" type="application/vnd.comicbook+zip"/>
 </entry>
 ```
+
+---
+
+## 4. OpenSearch Contract với vBook (Direct URL Template)
+
+Qua dịch ngược mã nguồn vBook (`tk9.java` - method `d` và `a`), cơ chế tìm kiếm trong vBook vận hành như sau:
+
+### A. Nhận Diện Search Template
+- vBook duyệt qua danh sách `<link>` ở root feed và tìm link có `rel` chứa từ khóa `"search"`.
+- vBook **không tải file mô tả trung gian `opensearch.xml`** mà bóc tách trực tiếp chuỗi URL từ thuộc tính `href`.
+- Định dạng bắt buộc của thẻ link trong feed Atom:
+  ```xml
+  <link rel="search" 
+        href="https://domain.com/feed/{folderId}/search?q={searchTerms}&amp;auth={token}&amp;key={apiKey}" 
+        type="application/atom+xml;profile=opds-catalog" 
+        title="Tìm kiếm sách"/>
+  ```
+
+### B. Thực Thi Truy Vấn Tìm Kiếm
+1. Người dùng nhập từ khóa tìm kiếm (ví dụ: `doraemon`).
+2. vBook mã hóa URL-encode từ khóa theo chuẩn RFC-3986.
+3. vBook thực hiện thay thế chuỗi token: `templateUrl.replace("{searchTerms}", encodedQuery)`.
+4. vBook gửi request `GET` đến URL đã thay thế, kèm Header `Authorization: Basic` (nếu có).
+
+### C. Phân Trang Kết Quả Tìm Kiếm (Infinite Scroll)
+- Feed kết quả tìm kiếm trả về các `<entry>` khớp với từ khóa.
+- Nếu có nhiều hơn 50 kết quả, Gateway trả về thẻ `<link rel="next" href=".../search?q=doraemon&amp;page=NEXT_TOKEN..."/>`.
+- Khi người dùng cuộn xuống đáy màn hình tìm kiếm trên vBook, ứng dụng tự động gọi URL trong thuộc tính `href` của `rel="next"` để tải tiếp trang sau.
+
