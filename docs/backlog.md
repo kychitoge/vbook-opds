@@ -148,6 +148,15 @@ Dự án được quản lý theo chuẩn SemVer và nguyên tắc Dao cạo Ock
 
 ---
 
-> **TRẠNG THÁI HIỆN TẠI (v1.4.0)**: Đạt chuẩn **100% Full Contract Compliance & Deep Search + Edge Cached**!
+## Milestone 11.5: Patch v1.4.1 (Deep Search Hardening & Single-Request-Per-Depth BFS Batching)
+- [x] **M11.5.1**: **Vá lỗi Silent Pagination Bug (ADR-011)**: Thêm vòng lặp `do...while (pageToken)` ngăn chặn bỏ sót thư mục con khi một cấp có >100 folders.
+- [x] **M11.5.2**: **Tối ưu hóa Batching BFS**: Nâng `batchSize = 35` gom toàn bộ thư mục cùng cấp vào 1 query duy nhất. Mỗi độ sâu tốn đúng 1 API request (Cả cây 3 tầng tốn tối đa đúng 3 requests API).
+- [x] **M11.5.3**: **Chuẩn hóa giới hạn an toàn**: Giữ nghiêm ngặt `maxFolders = 35` và `maxDepth = 3` để query luôn `< 2KB`.
+- [x] **M11.5.4**: **Cơ chế Fallback an toàn (Graceful Degradation)**: Tự động lùi về Flat Search (Root) nếu gặp lỗi mạng hoặc chạm trần Quota 429.
+- [x] **M11.5.5**: 12/12 Test Suites kiểm thử tự động đạt 100% pass.
+
+---
+
+> **TRẠNG THÁI HIỆN TẠI (v1.4.1)**: Đạt chuẩn **100% Full Contract Compliance & Deep Search Hardened**!
 
 

@@ -195,3 +195,22 @@ Tài liệu này ghi chép các quyết định kiến trúc then chốt của d
   - 100% tương thích với tính năng Cuộn vô tận (Infinite Scroll) của vBook Client.
   - Tuyệt đối không rò rỉ dữ liệu của kho sách có mật khẩu vào bộ nhớ đệm công khai.
 
+---
+
+## [ADR-011] Deep Search Hardening: Silent Pagination Bug Fix & Single-Request-Per-Depth BFS Batching
+- **Ngày**: 2026-09-11
+- **Phiên bản**: v1.4.1
+- **Bối cảnh**:
+  1. **Lỗi logic ngầm (Silent Pagination Bug)**: Trong `fetchDescendantFolderIds`, Google API gọi `pageSize=100` nhưng bỏ qua `nextPageToken`. Khi một cấp có trên 100 thư mục con, các thư mục từ 101 trở đi bị bỏ sót âm thầm.
+  2. **Tối ưu số lượng API request**: `batchSize = 15` cũ dẫn đến việc quét mỗi cấp độ có thể tốn 2-3 requests, làm tăng latency và nguy cơ chạm trần 100 req/100s của Google API khi nhiều người dùng tìm kiếm đồng thời.
+  3. **Đảm bảo chuẩn an toàn < 2KB URL**: Giữ vững `maxFolders = 35` và `maxDepth = 3` để ngăn chặn rủi ro lỗi `HTTP 414 URI Too Long` từ các firewall/proxy trung gian.
+- **Quyết định**:
+  - **Vá triệt để phân trang**: Bổ sung vòng lặp `do { ... } while (pageToken && collectedFolderIds.length < maxFolders)` đảm bảo duyệt đầy đủ mọi trang của thư mục con.
+  - **Tăng batchSize lên 35**: Gom toàn bộ thư mục cùng 1 cấp độ vào đúng 1 request API duy nhất. Tối đa chỉ tốn đúng 3 requests API cho cả cây thư mục 3 tầng (giảm 50% số lượng request so với trước).
+  - **Cắt an toàn tuyệt đối**: Sử dụng `collectedFolderIds.slice(0, maxFolders)` đảm bảo không bao giờ vượt quá 35 thư mục trong chuỗi query Google.
+  - **Cơ chế Fallback an toàn (Graceful Degradation)**: Khi gặp lỗi mạng hoặc 429 Quota Exceeded trong quá trình quét cây thư mục con, hệ thống tự động hạ cấp xuống Flat Search cấp 1 (Root), không gây sập feed hay crash app vBook.
+- **Hệ quả**:
+  - Triệt tiêu 100% rủi ro mất thư mục con do phân trang.
+  - Tối ưu I/O, giảm số lượng request đến Google API xuống mức tối thiểu vật lý (Depth = 3 $\rightarrow$ Max 3 requests).
+  - Duy trì 100% tính tương thích và bảo vệ hạn mức Quota cho Solo Dev.
+

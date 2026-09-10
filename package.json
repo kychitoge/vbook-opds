@@ -1,6 +1,6 @@
 {
   "name": "vbook-opds-gateway",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Cloud-to-OPDS Protocol Adapter for vBook on Cloudflare Workers",
   "main": "src/index.ts",
   "scripts": {

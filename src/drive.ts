@@ -221,7 +221,7 @@ export function clearTreeCache(): void {
 /**
  * Thu thập tất cả ID thư mục con đệ quy (tối đa maxDepth cấp và maxFolders thư mục)
  * Thuật toán: BFS Level-Order Traversal trên cây đa phân (N-ary Tree)
- * Sử dụng batching query OR để giảm thiểu số lượng request tới Google Drive API
+ * Tối ưu: Batching query 35 folders/request để gom mỗi depth vào 1 request duy nhất (< 2KB)
  */
 export async function fetchDescendantFolderIds(options: {
   rootFolderId: string;
@@ -236,7 +236,9 @@ export async function fetchDescendantFolderIds(options: {
 
   while (currentLevelFolderIds.length > 0 && depth < maxDepth && collectedFolderIds.length < maxFolders) {
     depth++;
-    const batchSize = 15;
+    // Gom toàn bộ thư mục của 1 level vào 1 batch duy nhất (Tối đa 35 để đảm bảo Query < 2KB)
+    // Giúp mỗi độ sâu (depth) chỉ tốn ĐÚNG 1 REQUEST API.
+    const batchSize = 35;
     const nextLevelFolderIds: string[] = [];
 
     for (let i = 0; i < currentLevelFolderIds.length; i += batchSize) {
@@ -247,30 +249,40 @@ export async function fetchDescendantFolderIds(options: {
       const query = `(${parentConditions}) and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
 
       try {
-        const url = new URL('https://www.googleapis.com/drive/v3/files');
-        url.searchParams.set('q', query);
-        url.searchParams.set('fields', 'files(id)');
-        url.searchParams.set('pageSize', '100');
-        url.searchParams.set('key', apiKey);
-        url.searchParams.set('spaces', 'drive');
-        url.searchParams.set('supportsAllDrives', 'true');
-        url.searchParams.set('includeItemsFromAllDrives', 'true');
+        let pageToken: string | undefined = undefined;
+        do {
+          const url = new URL('https://www.googleapis.com/drive/v3/files');
+          url.searchParams.set('q', query);
+          url.searchParams.set('fields', 'nextPageToken, files(id)');
+          url.searchParams.set('pageSize', '100');
+          url.searchParams.set('key', apiKey);
+          url.searchParams.set('spaces', 'drive');
+          url.searchParams.set('supportsAllDrives', 'true');
+          url.searchParams.set('includeItemsFromAllDrives', 'true');
+          
+          if (pageToken) {
+            url.searchParams.set('pageToken', pageToken);
+          }
 
-        const response = await fetch(url.toString(), {
-          headers: { Accept: 'application/json' },
-        });
+          const response = await fetch(url.toString(), {
+            headers: { Accept: 'application/json' },
+          });
 
-        if (response.ok) {
-          const data = (await response.json()) as { files?: { id: string }[] };
+          if (!response.ok) break;
+
+          const data = (await response.json()) as { files?: { id: string }[], nextPageToken?: string };
           const foundFolders = (data.files || []).map((f) => f.id);
+          
           for (const fid of foundFolders) {
             if (!collectedFolderIds.includes(fid) && fid !== rootFolderId) {
               collectedFolderIds.push(fid);
               nextLevelFolderIds.push(fid);
-              if (collectedFolderIds.length >= maxFolders) break;
             }
           }
-        }
+          
+          pageToken = data.nextPageToken;
+        } while (pageToken && collectedFolderIds.length < maxFolders);
+        
       } catch (err) {
         console.warn('Lỗi khi quét thư mục con:', err);
         break;
@@ -280,7 +292,7 @@ export async function fetchDescendantFolderIds(options: {
     currentLevelFolderIds = nextLevelFolderIds;
   }
 
-  return collectedFolderIds;
+  return collectedFolderIds.slice(0, maxFolders);
 }
 
 /**
@@ -383,7 +395,7 @@ export async function searchDriveFolder(options: {
         rootFolderId: folderId,
         apiKey,
         maxDepth: 3,
-        maxFolders: 35, // Giới hạn 35 folder để query string < 2KB, an toàn tuyệt đối với Google Drive API
+        maxFolders: 35, // Tuân thủ nghiêm ngặt chuẩn < 2KB URL
         ttlSeconds: 300, // Chốt chuẩn 300 giây (5 phút)
       });
       folderIds.push(...subfolderIds);

@@ -68,12 +68,13 @@ Mọi thay đổi trong mã nguồn **bắt buộc phải tuân thủ nghiêm ng
 
 ## 5. THUẬT TOÁN & BỘ NHỚ ĐỆM (SERVER CORE)
 
-### A. Động Cơ Tìm Kiếm Sâu (Deep Search Engine - ADR-010)
+### A. Động Cơ Tìm Kiếm Sâu (Deep Search Engine - ADR-010 & ADR-011)
 - **Bản chất cấu trúc**: Google Drive là **Cây đa phân (N-ary Tree)** bậc $N \ge 0$.
-- **Thuật toán quét**: Sử dụng **BFS Level-Order Traversal** quét các thư mục con theo batching query `('f1' in parents or 'f2' in parents)` (giới hạn 3 cấp, tối đa 35 folders).
+- **Thuật toán quét**: Sử dụng **BFS Level-Order Traversal** quét các thư mục con theo batching query (giới hạn 3 cấp, tối đa 35 folders, gom batch 35 folders/request để tối đa hóa I/O chỉ tốn đúng 3 requests API cho cả cây).
+- **Kháng lỗi phân trang**: Vòng lặp `do...while (pageToken)` loại bỏ triệt để nguy cơ sót thư mục con khi một cấp có >100 folders.
 - **Tree Memoization (TTL 300s / 5 phút)**: Lưu danh sách ID thư mục con vào Memory Cache + Cloudflare Edge Cache (`https://internal.cache/tree/${rootFolderId}`). Các lần tìm kiếm tiếp theo lấy danh sách folder trong **0ms** (0 Google API request).
 - **Truy vấn hợp nhất**: Tìm kiếm được gộp vào 1 câu query Google duy nhất `< 2KB` (tránh lỗi `HTTP 414 URI Too Long`), bảo toàn 100% native `nextPageToken`.
-- **Cập nhật dữ liệu thời gian thực**: Người dùng thêm sách mới vào folder cũ sẽ được Google tìm thấy ngay lập tức (0s delay).
+- **Hạ cấp tự động (Graceful Fallback)**: Tự động lùi về Flat Search (Root) nếu quét Deep Search gặp lỗi mạng hoặc chạm Quota 429.
 
 ### B. Cloudflare Edge Cache Layer (`caches.default`)
 - **Feed danh mục (`/feed/:folderId`)**: Cache biên **60 giây** (`s-maxage=60`).
