@@ -107,11 +107,19 @@ Dự án được quản lý theo chuẩn SemVer và nguyên tắc Dao cạo Ock
 
 ---
 
-## Milestone 9: Minor v1.3.0 (Rich Metadata & OPDS 2.0 JSON Content Negotiation)
-- [ ] **M9.1**: **Metadata phong phú cho Entry**:
-  - Bổ sung thẻ `<category term="..." label="..."/>` hiển thị thể loại/tags trên vBook.
-  - Dự phòng `<content>` nếu `<summary>` trống.
-- [ ] **M9.2**: **Hỗ trợ OPDS 2.0 JSON (`application/opds+json`)**:
-  - Cơ chế Content Negotiation: Khi vBook gửi header `Accept: application/opds+json`, Gateway trả về JSON chuẩn OPDS 2.0 (`Opds2Feed`: metadata, links, navigation, publications).
-  - Phản hồi siêu nhẹ, bỏ qua tầng serialize XML, giảm tối đa dung lượng response trên Cloudflare Worker.
+## Milestone 9: Minor v1.3.0 (Rich Metadata & OPDS 2.0 JSON Content Negotiation - Full Contract Edition)
+- [x] **M9.1**: **Metadata phong phú cho Entry (Atom OPDS 1.2)**:
+  - Bổ sung thẻ `<category term="..." label="..."/>` hiển thị nhãn định dạng format trên vBook.
+  - Thẻ dự phòng `<content type="text">` fallback cho các reader yêu cầu thẻ content.
+- [x] **M9.2**: **Hỗ trợ OPDS 2.0 JSON (`application/opds+json`)**:
+  - Cơ chế Content Negotiation: Khi client/vBook gửi header `Accept: application/opds+json`, Gateway trả về JSON chuẩn OPDS 2.0 (`Opds2Feed`: metadata, links, navigation, publications).
+  - Khớp 100% đặc tả giao thức OPDS 2.0 theo vBook Client Schema.
+  - Bảo vệ thư mục con bằng `subfolderIdMap` (AES-GCM masking) và bảo toàn tham số xác thực `authParam`.
+  - Phản hồi siêu nhẹ, bỏ qua tầng serialize XML, tối ưu hoá TTFB trên Cloudflare Edge.
+- [x] **M9.3**: Bộ kiểm thử tự động đạt 9/9 test suites (100% pass) và build sạch không cảnh báo.
+
+---
+
+> **TRẠNG THÁI HIỆN TẠI (v1.3.0)**: Dự án đã chính thức hoàn thành **100% HỢP ĐỒNG GIAO TIẾP VỚI vBOOK (FULL CORE CONTRACT COMPLIANCE)**!
+
 

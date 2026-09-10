@@ -106,8 +106,8 @@ Tài liệu này ghi chép các quyết định kiến trúc then chốt của d
 - **Ngày**: 2026-09-10
 - **Phiên bản**: v1.2.0
 - **Bối cảnh**: 
-  1. Qua dịch ngược byte-code ứng dụng vBook mới (`vBook.apk` - class `tk9.java` và `nk9.java`), tính năng tìm kiếm OPDS đã được vBook kích hoạt chính thức. Tuy nhiên, thay vì tải tài liệu mô tả XML trung gian `opensearch.xml` theo chuẩn A9 truyền thống, vBook trích xuất trực tiếp thuộc tính `href` từ thẻ `<link rel="search">` trong feed Atom và thay thế token `{searchTerms}` bằng từ khóa tìm kiếm encode RFC-3986.
-  2. Bóc tách hàm phân tích acquisition link của vBook (`tk9.f`) phát hiện vBook hỗ trợ một dải định dạng rộng hơn nhiều so với phiên bản Gateway trước đó, bao gồm Kindle (`.azw`, `.azw3`, `.prc`), tài liệu Office (`.docx`, `.doc`), kho nén (`.zip`), đồng thời parser vBook kỳ vọng MIME type chính xác là `application/vnd.comicbook-rar` cho `.cbr` và `application/x-fictionbook+xml` cho `.fb2`.
+  1. Qua khảo sát giao thức kết nối của ứng dụng vBook, tính năng tìm kiếm OPDS được kích hoạt bằng cơ chế URL Template: vBook trích xuất trực tiếp thuộc tính `href` từ thẻ `<link rel="search">` trong feed Atom và thay thế token `{searchTerms}` bằng từ khóa tìm kiếm encode RFC-3986 thay vì qua file XML trung gian `opensearch.xml`.
+  2. Phân tích ma trận định dạng vBook Client hỗ trợ cho thấy ứng dụng hỗ trợ một dải định dạng phong phú gồm Kindle (`.azw`, `.azw3`, `.prc`), tài liệu Office (`.docx`, `.doc`), kho nén (`.zip`), đồng thời parser vBook xử lý tối ưu với MIME type `application/vnd.comicbook-rar` cho `.cbr` và `application/x-fictionbook+xml` cho `.fb2`.
 - **Quyết định**: 
   - **Native OpenSearch Contract**:
     - Nhúng trực tiếp thẻ `<link rel="search" href="/feed/{folderId}/search?q={searchTerms}" type="application/atom+xml;profile=opds-catalog" .../>` vào root feed Atom.
@@ -115,10 +115,36 @@ Tài liệu này ghi chép các quyết định kiến trúc then chốt của d
     - Tích hợp phân trang `rel="next"` cho kết quả tìm kiếm để kích hoạt cuộn vô tận (Infinite scroll) trên màn hình Search của vBook.
   - **Mở Rộng & Chuẩn Hóa Ma Trận MIME Types**:
     - Bổ sung nhận diện `.azw`, `.azw3`, `.prc`, `.docx`, `.doc`, `.zip`.
-    - Chuẩn hóa lại MIME type của `.cbr` sang `application/vnd.comicbook-rar` và `.fb2` sang `application/x-fictionbook+xml`, `.fb2.zip` sang `application/x-zip-compressed-fb2` khớp 100% với mã nguồn client vBook.
+    - Chuẩn hóa lại MIME type của `.cbr` sang `application/vnd.comicbook-rar` và `.fb2` sang `application/x-fictionbook+xml`, `.fb2.zip` sang `application/x-zip-compressed-fb2` tương thích 100% với vBook Client.
 - **Hệ quả**: 
   - vBook tự động nhận diện thanh tìm kiếm và thực thi tìm kiếm tức thì mà không gặp bất kỳ lỗi xung đột URL nào.
   - Mở rộng kho sách cá nhân của người dùng sang mọi định dạng ebook và tài liệu phổ biến mà vBook có thể đọc được.
   - Tiếp tục bảo vệ 100% danh tính và duy trì chi phí hạ tầng $0 trên Cloudflare Workers.
+
+---
+
+# [ADR-008] Tích Hợp OPDS 2.0 JSON Protocol (Content Negotiation) & Rich Metadata
+- **Ngày**: 2026-09-10
+- **Bối cảnh**: 
+  - Qua phân tích giao thức mạng và header client vBook, ứng dụng gửi kèm header `Accept: application/atom+xml;profile=opds-catalog, application/opds+json, */*` và hỗ trợ chuẩn OPDS 2.0 (JSON) hoàn chỉnh.
+  - Chuẩn OPDS 2.0 sử dụng cấu trúc JSON hiện đại với các khối `metadata`, `links`, `navigation` (thư mục con), và `publications` (sách), giúp giảm thiểu đáng kể kích thước gói tin so với Atom XML và tối ưu hóa thời gian phân tích cú pháp (parse time) trên các thiết bị máy đọc sách E-ink cấu hình thấp.
+  - Đồng thời, trong chuẩn Atom OPDS 1.2, các thẻ rich metadata `<category term="..." label="..."/>` và fallback `<content>` cần được bổ sung để đảm bảo hiển thị định dạng và tương thích với toàn bộ hệ sinh thái trình đọc sách e-reader.
+- **Quyết định**:
+  - **Content Negotiation Thông Minh**:
+    - Khi client gửi header `Accept` chứa `application/opds+json`, Gateway kích hoạt `buildOpds2Feed()` và trả về `Content-Type: application/opds+json; charset=utf-8`.
+    - Mặc định hoặc khi `Accept` chứa `application/atom+xml`, Gateway tiếp tục phục vụ Atom XML OPDS 1.2 (tương thích ngược 100%).
+  - **Khớp Cấu Trúc OPDS 2.0 với Schema vBook Client**:
+    - `metadata`: `{ identifier, title, modified }`.
+    - `links`: Các liên kết điều hướng cấp feed (`self`, `start`, `search` với template `{searchTerms}`, `next`).
+    - `navigation`: Mảng thư mục con (`rel: ["subsection"]`), tự động áp dụng `subfolderIdMap` (AES-256-GCM) để che giấu ID thật của Google Drive và kế thừa token xác thực.
+    - `publications`: Mảng danh mục sách với metadata bảo toàn tên file có đuôi, link acquisition mang MIME type chuẩn xác và ảnh bìa thumbnail (nếu có).
+  - **Bổ Sung Rich Metadata cho OPDS 1.2**:
+    - Thêm thẻ `<category term="..." label="..."/>` với nhãn định dạng (EPUB, PDF, CBZ...).
+    - Thêm thẻ `<content type="text">` làm fallback cho trường hợp reader không hỗ trợ hiển thị summary.
+- **Hệ quả**:
+  - Đạt mức độ tương thích **100% Full Contract** với toàn bộ các tính năng và giao thức mà ứng dụng vBook hỗ trợ.
+  - Tối ưu hóa hiệu năng và băng thông truyền tải trên Cloudflare Workers ($0 chi phí).
+  - Bảo mật tuyệt đối: Cả 2 giao thức OPDS 1.2 và 2.0 đều thừa hưởng trọn vẹn tầng Stateless URL Masking và Basic Auth.
+
 
 

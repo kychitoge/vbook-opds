@@ -1,13 +1,13 @@
-# Kiến Trúc Hệ Thống: VBook OPDS Gateway (Cloud-to-OPDS) - v1.2.0
+# Kiến Trúc Hệ Thống: VBook OPDS Gateway (Cloud-to-OPDS) - v1.3.0 (Full Contract Edition)
 
 ## 1. Bối Cảnh & Mục Tiêu
 
 - **Vấn đề cốt lõi:** vBook hỗ trợ chuẩn OPDS để người dùng thêm kho tài nguyên sách cá nhân mà không phụ thuộc vào cơ chế backup dữ liệu. Tuy nhiên, người dùng phổ thông chỉ có link thư mục Google Drive (chứa file `.epub`, `.cbz`, `.pdf`), không có khả năng tự dựng và duy trì máy chủ Calibre/Kavita/Komga phức tạp.
 - **Bảo vệ danh tính (Privacy-First từ v1.1.0):** Khi chia sẻ công khai hoặc lộ link feed chứa `folderId` gốc của Google Drive, kẻ xấu có thể dán ID vào trình duyệt để truy ra Avatar, Họ tên và Email tài khoản Google của chủ sở hữu. Do đó, hệ thống tích hợp tầng Stateless URL Masking (AES-256-GCM) để mã hóa `folderId` thành chuỗi `m_...` vô danh.
-- **Mục tiêu:** Xây dựng một **Protocol Adapter / Gateway** trung gian siêu nhẹ, chạy hoàn toàn trên Cloudflare Workers (chi phí hạ tầng $0):
-  - Dịch danh mục file từ Google Drive sang định dạng Atom XML chuẩn OPDS 1.2 mà vBook hiểu được.
-  - Phục vụ người dùng cá nhân và cộng đồng máy đọc sách E-ink (không có Google Play Services).
-  - Không lưu trữ nội dung sách, không lưu index cơ sở dữ liệu nặng, miễn nhiễm bản quyền (DMCA-free) và hoàn toàn riêng tư.
+- **Mục tiêu v1.3.0:** Đạt 100% Full Contract với ứng dụng vBook:
+  - Hỗ trợ song song cả **OPDS 1.2 (Atom XML)** và **OPDS 2.0 (`application/opds+json`)** thông qua Content Negotiation (`Accept` header).
+  - Tích hợp Rich Metadata (`<category>` format tag, `<content>` fallback).
+  - Chạy hoàn toàn trên Cloudflare Workers (chi phí hạ tầng $0): Không lưu trữ nội dung sách, không lưu index cơ sở dữ liệu nặng, miễn nhiễm bản quyền (DMCA-free) và hoàn toàn riêng tư.
 
 ---
 
@@ -18,9 +18,10 @@
 |                  |  (1)    |   VBook OPDS Gateway (CF Worker)        |  (2)    |                       |
 |   vBook App      | ------->|   - Stateless Crypto Layer (AES-256-GCM)| ------->|   Google Drive API    |
 | (Mobile / E-ink) |         |     (Giải mã m_... -> folderId gốc)     |         | (Folder & File Data)  |
-|                  | <-------|   - Parser & Atom XML Builder           | <-------|                       |
-|                  |  (3)    |   - Basic Auth Verifier                 |         |                       |
-+------------------+         |   - Subfolder Masking Transformer       |         +-----------------------+
+|                  | <-------|   - Content Negotiation (OPDS 1.2/2.0)  | <-------|                       |
+|                  |  (3)    |   - Atom XML Builder / JSON 2.0 Builder |         |                       |
+|                  |         |   - Basic Auth Verifier                 |         +-----------------------+
++------------------+         |   - Subfolder Masking Transformer       |
         |                    |   - Native OpenSearch Engine ({search}) |
         |                    |   - 302 Redirect Handler                |
         |                    +-----------------------------------------+
@@ -49,8 +50,8 @@
    - Gateway trả về mã `HTTP 302 Found` (Redirect) trỏ thẳng sang URL tải trực tiếp của Google (`https://drive.google.com/uc?export=download&id=:fileId`).
    - Băng thông tải sách đi trực tiếp giữa Google và thiết bị người dùng. Gateway tiêu tốn 0 MB băng thông lưu trữ và không làm lộ Google API Key.
 5. **Tìm kiếm sách (vBook Native OpenSearch Protocol):**
-   - *Trạng thái v1.2.0:* Kích hoạt chính thức theo đúng bytecode vBook mới.
-   - Gateway nhúng trực tiếp URL template vào feed Atom: `<link rel="search" href="/feed/{folderId}/search?q={searchTerms}" .../>`.
+   - *Trạng thái v1.2.0:* Kích hoạt chính thức theo chuẩn giao tiếp tìm kiếm của vBook.
+   - Gateway nhúng trực tiếp URL template vào feed: `<link rel="search" href="/feed/{folderId}/search?q={searchTerms}" .../>`.
    - vBook client thay `{searchTerms}` bằng từ khóa encode RFC-3986 và gửi request tới `/feed/:folderId/search`.
    - Gateway giải mã `folderId` (hỗ trợ cả ID ẩn `m_...`), truy vấn Google Drive API (`name contains '...'`), bảo toàn token xác thực `authParam` và phân trang kết quả `rel="next"`.
 

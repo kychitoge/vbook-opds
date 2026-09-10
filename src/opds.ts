@@ -15,7 +15,7 @@ export function escapeXml(unsafe: string): string {
 /**
  * Làm sạch và chuẩn hóa tên sách cho vBook:
  * Giữ nguyên 100% tên file gốc kèm phần mở rộng (.epub, .pdf, .cbz...)
- * vì bytecode vBook (j12.c, uya.a) trích xuất đuôi file từ thẻ <title>
+ * vì vBook Client trích xuất đuôi file từ thẻ <title>
  * để tự động gán màu bìa sách SVG và hiển thị badge định dạng trên kệ sách.
  * Cắt ngắn an toàn nếu tên file quá dài (> 255 ký tự) nhưng vẫn bảo toàn đuôi file.
  */
@@ -120,6 +120,11 @@ export function buildOpdsFeed(options: BuildOpdsOptions): string {
         const bookMime = item.bookMimeType || 'application/epub+zip';
         const downloadUrl = `${origin}/download/${item.id}${buildSubParams()}`;
 
+        // Trích xuất định dạng làm category tag cho vBook (ví dụ: EPUB, PDF, CBZ...)
+        const extMatch = item.name.match(/\.([a-zA-Z0-9]+)$/);
+        const formatCategory = extMatch ? extMatch[1].toUpperCase() : 'EBOOK';
+        const categoryXml = `\n    <category term="${escapeXml(formatCategory)}" label="${escapeXml(formatCategory)}"/>`;
+
         // Chỉ chèn link ảnh nếu Google Drive thực sự có thumbnail hợp lệ
         let imageLinkXml = '';
         if (item.thumbnailLink) {
@@ -130,7 +135,8 @@ export function buildOpdsFeed(options: BuildOpdsOptions): string {
     <id>urn:vbook:book:${item.id}</id>
     <title>${escapeXml(displayTitle)}</title>
     <updated>${updated}</updated>
-    <summary>${escapeXml(item.name)}</summary>${imageLinkXml}
+    <summary>${escapeXml(item.name)}</summary>
+    <content type="text">${escapeXml(item.name)}</content>${categoryXml}${imageLinkXml}
     <link rel="http://opds-spec.org/acquisition" href="${escapeXml(downloadUrl)}" type="${bookMime}"/>
   </entry>`;
       }

@@ -1,5 +1,6 @@
 import { extractFolderId, detectBookMimeType } from '../src/drive';
 import { buildOpdsFeed, buildOpenSearchDescription, cleanBookTitle } from '../src/opds';
+import { buildOpds2Feed } from '../src/opds2';
 import { verifyBasicAuth, createAuthToken, parseBasicAuthHeader } from '../src/auth';
 import { maskFolderId, unmaskFolderId, isMaskedId } from '../src/crypto';
 
@@ -47,7 +48,7 @@ assert(
 );
 assert(
   detectBookMimeType('Comic.cbr', 'application/x-rar') === 'application/vnd.comicbook-rar',
-  'Nhận diện CBR (khớp parser vBook comicbook-rar)'
+  'Nhận diện CBR chuẩn vBook (comicbook-rar)'
 );
 assert(
   detectBookMimeType('TaiLieu.pdf', 'application/pdf') === 'application/pdf',
@@ -71,7 +72,7 @@ assert(
 );
 assert(
   detectBookMimeType('Fiction.fb2', 'text/xml') === 'application/x-fictionbook+xml',
-  'Nhận diện FB2 (khớp parser vBook x-fictionbook+xml)'
+  'Nhận diện FB2 chuẩn vBook (x-fictionbook+xml)'
 );
 assert(
   detectBookMimeType('Fiction.fb2.zip', 'application/zip') === 'application/x-zip-compressed-fb2',
@@ -155,6 +156,8 @@ assert(xmlWithAuth.includes('rel="next" href="https://opds.test.com/feed/rootFol
 assert(xmlWithAuth.includes('<link rel="subsection" href="https://opds.test.com/feed/subfolder_1?auth=dmJvb2s6c2VjcmV0MTIz" type="application/atom+xml;profile=opds-catalog"/>'), 'Subfolder kế thừa auth param bảo vệ thư mục con');
 assert(xmlWithAuth.includes('<link rel="http://opds-spec.org/acquisition" href="https://opds.test.com/download/book_1?auth=dmJvb2s6c2VjcmV0MTIz" type="application/epub+zip"/>'), 'Download link kế thừa auth param');
 assert(xmlWithAuth.includes('<title>Pham Nhan Tu Tien - Vong Ngu.epub</title>'), 'Title bảo toàn đuôi file để vBook render bìa SVG và badge format');
+assert(xmlWithAuth.includes('<category term="EPUB" label="EPUB"/>'), 'Thẻ category format tag cho vBook nhận diện định dạng');
+assert(xmlWithAuth.includes('<content type="text">Pham Nhan Tu Tien - Vong Ngu.epub</content>'), 'Thẻ content fallback cho reader text');
 assert(!xmlWithAuth.includes('<author>'), 'Không có thẻ author đoán mò');
 assert(
   xmlWithAuth.includes(
@@ -276,8 +279,75 @@ assert(
 assert(searchFeedXml.includes('Harry Potter - Tap 1.epub'), 'Sách tìm thấy hiển thị trong feed');
 console.log('✓ Passed 8. vBook Native OpenSearch Engine & Pagination');
 
+console.log('--- 9. Kiểm tra OPDS 2.0 JSON Builder Contract (application/opds+json) ---');
+const opds2FeedRaw = buildOpds2Feed({
+  feedTitle: 'Kho Sách OPDS 2.0',
+  folderId: masked,
+  origin: 'https://opds.test.com',
+  currentPath: `/feed/${masked}`,
+  nextPageToken: 'next_page_opds2',
+  authParam: 'tokenXYZ',
+  apiKeyParam: 'key123',
+  subfolderIdMap: {
+    subfolder_1: subfolderMaskedId,
+  },
+  items: [
+    {
+      id: 'subfolder_1',
+      name: 'Thư Mục Kiếm Hiệp',
+      mimeType: 'application/vnd.google-apps.folder',
+      isFolder: true,
+    },
+    {
+      id: 'book_opds2_1',
+      name: 'Tieu Ngao Giang Ho.epub',
+      mimeType: 'application/epub+zip',
+      bookMimeType: 'application/epub+zip',
+      isFolder: false,
+      thumbnailLink: 'https://lh3.googleusercontent.com/thumb_opds2',
+    },
+  ],
+});
+
+const opds2Feed = JSON.parse(opds2FeedRaw);
+
+assert(opds2Feed.metadata.title === 'Kho Sách OPDS 2.0', 'OPDS 2.0 Metadata Title');
+assert(opds2Feed.metadata.identifier === `urn:vbook:feed:${masked}`, 'OPDS 2.0 Metadata Identifier');
+
+// Links
+const selfLink = opds2Feed.links.find((l) => l.rel.includes('self'));
+assert(selfLink !== undefined && selfLink.type === 'application/opds+json', 'OPDS 2.0 Self link đúng type');
+assert(selfLink?.href.includes('auth=tokenXYZ') === true, 'Self link bảo toàn auth');
+
+const searchLink = opds2Feed.links.find((l) => l.rel.includes('search'));
+assert(
+  searchLink !== undefined &&
+    searchLink.href.includes('{searchTerms}') &&
+    searchLink.href.includes('auth=tokenXYZ') &&
+    searchLink.type === 'application/opds+json',
+  'OPDS 2.0 Search link chứa {searchTerms} và type JSON'
+);
+
+const nextLink = opds2Feed.links.find((l) => l.rel.includes('next'));
+assert(nextLink !== undefined && nextLink.href.includes('page=next_page_opds2'), 'OPDS 2.0 Next link phân trang');
+
+// Navigation (Subfolders)
+assert(opds2Feed.navigation.length === 1, 'OPDS 2.0 Navigation có 1 thư mục');
+assert(opds2Feed.navigation[0].title === 'Thư Mục Kiếm Hiệp', 'OPDS 2.0 Navigation Title');
+assert(opds2Feed.navigation[0].href === `https://opds.test.com/feed/${subfolderMaskedId}?auth=tokenXYZ&key=key123`, 'OPDS 2.0 Navigation dùng Masked ID và kế thừa auth');
+assert(!JSON.stringify(opds2Feed.navigation).includes('subfolder_1'), 'Tuyệt đối không rò rỉ raw subfolder_1');
+
+// Publications (Books)
+assert(opds2Feed.publications.length === 1, 'OPDS 2.0 Publications có 1 quyển sách');
+const pub = opds2Feed.publications[0];
+assert(pub.metadata.title === 'Tieu Ngao Giang Ho.epub', 'Publication title bảo toàn đuôi');
+assert(pub.links.length === 1 && pub.links[0].type === 'application/epub+zip', 'Acquisition link đúng mime');
+assert(pub.links[0].href.includes('download/book_opds2_1'), 'Acquisition download URL');
+assert(pub.images.length === 1 && pub.images[0].href === 'https://lh3.googleusercontent.com/thumb_opds2', 'Publication thumbnail image');
+console.log('✓ Passed 9. OPDS 2.0 JSON Builder Contract (application/opds+json)');
+
   console.log('\n=========================================');
-  console.log('TẤT CẢ 8 BỘ KIỂM THỬ ĐỀU ĐẠT CHUẨN 100%!');
+  console.log('TẤT CẢ 9 BỘ KIỂM THỬ ĐỀU ĐẠT CHUẨN 100%!');
   console.log('=========================================');
 }
 

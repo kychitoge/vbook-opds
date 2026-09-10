@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { fetchDriveFolder, extractFolderId, searchDriveFolder } from './drive';
 import { buildOpdsFeed, buildOpenSearchDescription } from './opds';
+import { buildOpds2Feed } from './opds2';
 import { verifyBasicAuth, createAuthToken } from './auth';
 import { maskFolderId, unmaskFolderId, isMaskedId } from './crypto';
 import { renderHtmlPage } from './ui';
@@ -22,6 +23,11 @@ app.use('*', cors());
 
 function getMaskSecret(c: any): string {
   return c.env.MASK_SECRET || 'vbook-opds-default-key-change-me-in-prod';
+}
+
+function isOpds2Requested(c: any): boolean {
+  const accept = c.req.header('Accept') || '';
+  return accept.includes('application/opds+json');
 }
 
 /**
@@ -138,8 +144,33 @@ app.get('/feed/:folderId', async (c) => {
       }
     }
 
-    // 4. Sinh XML Atom OPDS 1.2
     const origin = new URL(c.req.url).origin;
+    const hasAuth = Boolean(authParam || c.env.AUTH_TOKEN || c.env.AUTH_USER);
+    const cacheHeader = hasAuth
+      ? 'private, no-cache, no-store, must-revalidate'
+      : 'public, max-age=60, s-maxage=60';
+
+    // 4. Content Negotiation: Trả về OPDS 2.0 JSON nếu client gửi Accept: application/opds+json
+    if (isOpds2Requested(c)) {
+      const json = buildOpds2Feed({
+        feedTitle: 'Kho Sách VBook',
+        folderId: rawFolderId,
+        items: driveData.items,
+        origin,
+        currentPath: `/feed/${rawFolderId}`,
+        nextPageToken: driveData.nextPageToken,
+        authParam,
+        apiKeyParam: c.req.query('key'),
+        subfolderIdMap,
+      });
+
+      return c.text(json, 200, {
+        'Content-Type': 'application/opds+json;charset=utf-8',
+        'Cache-Control': cacheHeader,
+      });
+    }
+
+    // Mặc định: Sinh XML Atom OPDS 1.2
     const xml = buildOpdsFeed({
       feedTitle: 'Kho Sách VBook',
       folderId: rawFolderId, // Bảo toàn masked ID trên URL gốc
@@ -151,11 +182,6 @@ app.get('/feed/:folderId', async (c) => {
       apiKeyParam: c.req.query('key'),
       subfolderIdMap,
     });
-
-    const hasAuth = Boolean(authParam || c.env.AUTH_TOKEN || c.env.AUTH_USER);
-    const cacheHeader = hasAuth
-      ? 'private, no-cache, no-store, must-revalidate'
-      : 'public, max-age=60, s-maxage=60';
 
     return c.text(xml, 200, {
       'Content-Type': 'application/atom+xml;profile=opds-catalog;charset=utf-8',
@@ -268,6 +294,31 @@ app.get('/feed/:folderId/search', async (c) => {
       }
     }
 
+    // Chống Spam API Quota: Nếu feed công khai, áp dụng Edge Cache 30s để giảm tải Google API
+    const cacheHeader = authParam
+      ? 'private, no-cache, no-store, must-revalidate'
+      : 'public, max-age=30, s-maxage=30';
+
+    if (isOpds2Requested(c)) {
+      const json = buildOpds2Feed({
+        feedTitle: `Tìm kiếm: "${searchTerm}"`,
+        folderId: rawFolderId,
+        items: driveData.items,
+        origin,
+        currentPath: `/feed/${rawFolderId}/search`,
+        nextPageToken: driveData.nextPageToken,
+        authParam,
+        apiKeyParam: c.req.query('key'),
+        searchTerms: searchTerm,
+        subfolderIdMap,
+      });
+
+      return c.text(json, 200, {
+        'Content-Type': 'application/opds+json;charset=utf-8',
+        'Cache-Control': cacheHeader,
+      });
+    }
+
     const xml = buildOpdsFeed({
       feedTitle: `Tìm kiếm: "${searchTerm}"`,
       folderId: rawFolderId,
@@ -280,11 +331,6 @@ app.get('/feed/:folderId/search', async (c) => {
       searchTerms: searchTerm,
       subfolderIdMap,
     });
-
-    // Chống Spam API Quota: Nếu feed công khai, áp dụng Edge Cache 30s để giảm tải Google API
-    const cacheHeader = authParam
-      ? 'private, no-cache, no-store, must-revalidate'
-      : 'public, max-age=30, s-maxage=30';
 
     return c.text(xml, 200, {
       'Content-Type': 'application/atom+xml;profile=opds-catalog;charset=utf-8',

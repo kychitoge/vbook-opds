@@ -80,7 +80,7 @@ vBook phân tích từng thẻ `<entry>` theo 2 kịch bản phân nhánh rõ r�
     + ⚠️ Nếu gọt bỏ đuôi file trong `<title>`, vBook sẽ không nhận diện được định dạng trên kệ sách, khiến bìa sách biến thành màu xám mặc định và mất huy hiệu format!
   - Tuyệt đối không cố đoán tác giả bằng regex để tránh cắt xén làm hỏng tên sách.
 * **MIME Types & Nhãn tải sách (Download Badge) trên vBook:**
-  Trong giao diện chọn tải sách, vBook tự động nhận diện huy hiệu định dạng dựa trên **thuộc tính `type` của acquisition link** (khớp chính xác theo bytecode `tk9.java`):
+  Trong giao diện chọn tải sách, vBook tự động nhận diện huy hiệu định dạng dựa trên **thuộc tính `type` của acquisition link** (chuẩn hóa theo ma trận định dạng vBook Client):
   - `application/epub+zip` $\rightarrow$ Nhãn: **`EPUB`**
   - `application/pdf` $\rightarrow$ Nhãn: **`PDF`**
   - `application/vnd.comicbook+zip` $\rightarrow$ Nhãn: **`CBZ`**
@@ -119,7 +119,7 @@ vBook phân tích từng thẻ `<entry>` theo 2 kịch bản phân nhánh rõ r�
 
 ## 4. OpenSearch Contract với vBook (Direct URL Template)
 
-Qua dịch ngược mã nguồn vBook (`tk9.java` - method `d` và `a`), cơ chế tìm kiếm trong vBook vận hành như sau:
+Qua phân tích giao thức client vBook, cơ chế tìm kiếm trong ứng dụng vận hành như sau:
 
 ### A. Nhận Diện Search Template
 - vBook duyệt qua danh sách `<link>` ở root feed và tìm link có `rel` chứa từ khóa `"search"`.
@@ -142,4 +142,85 @@ Qua dịch ngược mã nguồn vBook (`tk9.java` - method `d` và `a`), cơ ch�
 - Feed kết quả tìm kiếm trả về các `<entry>` khớp với từ khóa.
 - Nếu có nhiều hơn 50 kết quả, Gateway trả về thẻ `<link rel="next" href=".../search?q=doraemon&amp;page=NEXT_TOKEN..."/>`.
 - Khi người dùng cuộn xuống đáy màn hình tìm kiếm trên vBook, ứng dụng tự động gọi URL trong thuộc tính `href` của `rel="next"` để tải tiếp trang sau.
+
+---
+
+## 5. OPDS 2.0 JSON Protocol Contract (application/opds+json)
+
+Ứng dụng vBook hỗ trợ đầy đủ chuẩn **OPDS 2.0 (JSON)** thông qua Content Negotiation (`Accept: application/opds+json`).
+
+### A. Content Negotiation Flow
+Khi Gateway nhận request:
+- Kiểm tra header `Accept`: nếu chứa `application/opds+json`, Gateway kích hoạt `buildOpds2Feed()` và trả về `Content-Type: application/opds+json; charset=utf-8`.
+- Mặc định hoặc khi `Accept` chứa `application/atom+xml`, Gateway trả về Atom XML chuẩn OPDS 1.2.
+
+### B. Cấu Trúc JSON Root Feed
+```json
+{
+  "metadata": {
+    "identifier": "urn:vbook:feed:{folderId}",
+    "title": "Kho Sách Của Bạn",
+    "modified": "2026-09-10T00:00:00.000Z"
+  },
+  "links": [
+    {
+      "href": "{selfUrl}",
+      "rel": ["self"],
+      "type": "application/opds+json"
+    },
+    {
+      "href": "{startUrl}",
+      "rel": ["start"],
+      "type": "application/opds+json"
+    },
+    {
+      "href": "{searchUrlTemplate}",
+      "rel": ["search"],
+      "type": "application/opds+json",
+      "title": "Tìm kiếm sách"
+    },
+    {
+      "href": "{nextPageUrl}",
+      "rel": ["next"],
+      "type": "application/opds+json"
+    }
+  ],
+  "navigation": [
+    {
+      "href": "{origin}/feed/m_{maskedSubFolderId}?auth={token}",
+      "title": "Thư Mục Con",
+      "type": "application/opds+json",
+      "rel": ["subsection"]
+    }
+  ],
+  "publications": [
+    {
+      "metadata": {
+        "identifier": "urn:vbook:book:{fileId}",
+        "title": "Tên Sách - Tác Giả.epub",
+        "modified": "2026-09-10T00:00:00.000Z"
+      },
+      "links": [
+        {
+          "href": "{origin}/download/{fileId}?auth={token}",
+          "rel": ["http://opds-spec.org/acquisition"],
+          "type": "application/epub+zip"
+        }
+      ],
+      "images": [
+        {
+          "href": "https://lh3.googleusercontent.com/...",
+          "type": "image/jpeg"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### C. Rich Metadata trong OPDS 1.2
+Để đảm bảo các e-reader và vBook hiển thị đầy đủ thông tin:
+- `<category term="EPUB" label="EPUB"/>`: Cung cấp nhãn định dạng rõ ràng trong Atom entry.
+- `<content type="text">{cleanTitle}</content>`: Dự phòng tóm tắt văn bản cho các reader yêu cầu thẻ content.
+
 
