@@ -141,10 +141,23 @@ Tài liệu này ghi chép các quyết định kiến trúc then chốt của d
   - **Bổ Sung Rich Metadata cho OPDS 1.2**:
     - Thêm thẻ `<category term="..." label="..."/>` với nhãn định dạng (EPUB, PDF, CBZ...).
     - Thêm thẻ `<content type="text">` làm fallback cho trường hợp reader không hỗ trợ hiển thị summary.
+
+---
+
+## [ADR-009] Worker Server Hardening: Google Drive Large File Download Bypass & API Quota 429 Graceful Handling
+- **Ngày**: 2026-09-10
+- **Phiên bản**: v1.3.1
+- **Bối cảnh**:
+  1. Với các tệp sách có dung lượng lớn (> 25MB - 100MB như truyện tranh CBZ, tài liệu PDF scan), máy chủ Google Drive tự động chặn tải trực tiếp và trả về trang HTML cảnh báo virus quét (`virus scan warning`). Khi vBook tải đường dẫn `/download/:fileId`, ứng dụng nhận về file HTML rác thay vì tệp sách.
+  2. Khi hạn mức Google API Key bị vượt (100 requests/100s) hoặc bị Google bóp băng thông, server trước đây trả về HTTP 500 chung chung khiến người dùng lầm tưởng worker bị lỗi hệ thống.
+  3. Cân nhắc tính năng Uptime Monitoring: Cloudflare Workers là mạng lưới Serverless Edge phân tán toàn cầu, không có cơ chế sleep/cold start như Heroku/Render nên việc dựng cron monitoring là dư thừa, vi phạm nguyên tắc Dao cạo Ockham.
+- **Quyết định**:
+  - **Download Bypass Cảnh Báo File Lớn**: Thêm tham số `&confirm=t` vào URL redirect Google Drive Direct Download (`https://drive.google.com/uc?export=download&id=${fileId}&confirm=t`). Đảm bảo vBook luôn tải thẳng tệp nhị phân gốc.
+  - **Graceful Error Handling cho Quota 429**: Bắt các lỗi `429`, `rateLimitExceeded`, `quotaExceeded` từ Google API và trả về mã `HTTP 429 Too Many Requests` kèm header `Retry-After: 60` và thông báo hướng dẫn người dùng chờ 1-2 phút hoặc dùng API Key riêng.
+  - **Xóa Bỏ Triệt Để Hardcoded Fallback Secret (CWE-798 Elimination)**: Loại bỏ hoàn toàn chuỗi fallback key mặc định trong `getMaskSecret`. Máy chủ bắt buộc phải có `MASK_SECRET` do admin cấu hình qua `wrangler secret put MASK_SECRET`; nếu thiếu, server từ chối xử lý và trả về HTTP 500 thông báo thiếu biến bảo mật thay vì dùng secret mặc định có thể bị dò quét.
+  - **Bảo vệ Triết lý Dao cạo Ockham**: Bỏ qua các module monitoring uptime và CI/CD phức tạp không cần thiết cho Solo Dev.
 - **Hệ quả**:
-  - Đạt mức độ tương thích **100% Full Contract** với toàn bộ các tính năng và giao thức mà ứng dụng vBook hỗ trợ.
-  - Tối ưu hóa hiệu năng và băng thông truyền tải trên Cloudflare Workers ($0 chi phí).
-  - Bảo mật tuyệt đối: Cả 2 giao thức OPDS 1.2 và 2.0 đều thừa hưởng trọn vẹn tầng Stateless URL Masking và Basic Auth.
-
-
-
+  - Tải mượt mà 100% các tệp truyện tranh CBZ và PDF dung lượng lớn trên vBook.
+  - Thông báo lỗi rõ ràng, chuyên nghiệp cho người dùng khi Google API chạm hạn mức.
+  - Triệt tiêu 100% lỗ hổng rò rỉ mã giải mã ID ẩn danh trên môi trường production.
+  - Giữ vững kiến trúc gọn nhẹ, $0 chi phí hạ tầng.

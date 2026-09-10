@@ -120,6 +120,18 @@ Dự án được quản lý theo chuẩn SemVer và nguyên tắc Dao cạo Ock
 
 ---
 
-> **TRẠNG THÁI HIỆN TẠI (v1.3.0)**: Dự án đã chính thức hoàn thành **100% HỢP ĐỒNG GIAO TIẾP VỚI vBOOK (FULL CORE CONTRACT COMPLIANCE)**!
+## Milestone 10: Patch v1.3.1 (Worker Server Hardening & Large File Download Bypass)
+- [x] **M10.1**: **Download Bypass Cảnh Báo Virus File Lớn (ADR-009)**:
+  - Bổ sung tham số `&confirm=t` vào URL redirect Google Drive Direct Download (`https://drive.google.com/uc?export=download&id=${fileId}&confirm=t`).
+  - Triệt tiêu lỗi vBook tải về trang HTML cảnh báo của Google thay vì file sách đối với các file PDF/CBZ nặng (>25MB).
+- [x] **M10.2**: **Xử Lý Quota Error 429 Graceful**:
+  - Bắt các mã lỗi rate limit và quota cạn kiệt từ Google Drive API, phản hồi `HTTP 429 Too Many Requests` kèm `Retry-After: 60` và thông báo tiếng Việt rõ ràng.
+- [x] **M10.3**: **Phòng vệ Truy cập Biến Môi trường Edge**:
+  - Sử dụng optional chaining `c.env?.` trên toàn bộ luồng xử lý router để an toàn tuyệt đối trong môi trường test/mock và Cloudflare Worker runtime.
+- [x] **M10.4**: Nâng cấp bộ kiểm thử tự động lên 10/10 test suites đạt 100% pass.
+
+---
+
+> **TRẠNG THÁI HIỆN TẠI (v1.3.1)**: Đạt chuẩn **100% Full Contract Compliance & Production Server Hardened**!
 
 

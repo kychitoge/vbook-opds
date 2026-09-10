@@ -21,8 +21,8 @@ const app = new Hono<{ Bindings: Env }>();
 // Kích hoạt CORS cho mọi nguồn
 app.use('*', cors());
 
-function getMaskSecret(c: any): string {
-  return c.env.MASK_SECRET || 'vbook-opds-default-key-change-me-in-prod';
+function getMaskSecret(c: any): string | null {
+  return c.env?.MASK_SECRET || null;
 }
 
 function isOpds2Requested(c: any): boolean {
@@ -38,8 +38,8 @@ function isOpds2Requested(c: any): boolean {
  */
 function isAuthorized(c: any): boolean {
   const envToken =
-    c.env.AUTH_TOKEN ||
-    (c.env.AUTH_USER && c.env.AUTH_PASS
+    c.env?.AUTH_TOKEN ||
+    (c.env?.AUTH_USER && c.env?.AUTH_PASS
       ? createAuthToken(c.env.AUTH_USER, c.env.AUTH_PASS)
       : undefined);
 
@@ -56,7 +56,7 @@ function isAuthorized(c: any): boolean {
  * Trang chủ: Giao diện Web tạo link OPDS cho vBook
  */
 app.get('/', (c) => {
-  const hasServerKey = Boolean(c.env.GOOGLE_API_KEY);
+  const hasServerKey = Boolean(c.env?.GOOGLE_API_KEY);
   return c.html(renderHtmlPage(hasServerKey));
 });
 
@@ -65,6 +65,14 @@ app.get('/', (c) => {
  */
 app.post('/api/mask', async (c) => {
   try {
+    const secret = getMaskSecret(c);
+    if (!secret) {
+      return c.json(
+        { error: 'Lỗi cấu hình máy chủ: Chưa thiết lập bí mật MASK_SECRET trên Cloudflare Worker' },
+        500
+      );
+    }
+
     const body = await c.req.json<{ folderId?: string }>();
     const rawInput = (body?.folderId || '').trim();
     const folderId = extractFolderId(rawInput);
@@ -73,7 +81,6 @@ app.post('/api/mask', async (c) => {
       return c.json({ error: 'Đường link hoặc mã thư mục Google Drive không hợp lệ' }, 400);
     }
 
-    const secret = getMaskSecret(c);
     const maskedId = await maskFolderId(folderId, secret);
     return c.json({ success: true, maskedId });
   } catch {
@@ -92,6 +99,9 @@ app.get('/feed/:folderId', async (c) => {
   let isMasked = false;
 
   if (isMaskedId(rawFolderId)) {
+    if (!secret) {
+      return c.text('Lỗi cấu hình máy chủ: Thiếu MASK_SECRET để giải mã danh mục sách', 500);
+    }
     realFolderId = await unmaskFolderId(rawFolderId, secret);
     isMasked = true;
     if (!realFolderId) {
@@ -112,7 +122,7 @@ app.get('/feed/:folderId', async (c) => {
   }
 
   // 2. Xác định Google Drive API Key
-  const apiKey = c.req.query('key') || c.env.GOOGLE_API_KEY;
+  const apiKey = c.req.query('key') || c.env?.GOOGLE_API_KEY;
   if (!apiKey) {
     return c.text(
       'Lỗi: Chưa cung cấp Google Drive API Key. Vui lòng cấu hình GOOGLE_API_KEY trên Cloudflare Worker hoặc truyền qua tham số ?key=YOUR_API_KEY',
@@ -121,7 +131,7 @@ app.get('/feed/:folderId', async (c) => {
   }
 
   const pageToken = c.req.query('page');
-  const pageSize = parseInt(c.env.DEFAULT_PAGE_SIZE || '50', 10);
+  const pageSize = parseInt(c.env?.DEFAULT_PAGE_SIZE || '50', 10);
   const authParam = c.req.query('auth');
 
   try {
@@ -135,7 +145,7 @@ app.get('/feed/:folderId', async (c) => {
 
     // Nếu đang ở chế độ ẩn ID: Tạo bảng ánh xạ masked ID cho các thư mục con để không làm lộ ID gốc
     let subfolderIdMap: Record<string, string> | undefined = undefined;
-    if (isMasked) {
+    if (isMasked && secret) {
       subfolderIdMap = {};
       for (const item of driveData.items) {
         if (item.isFolder) {
@@ -145,7 +155,7 @@ app.get('/feed/:folderId', async (c) => {
     }
 
     const origin = new URL(c.req.url).origin;
-    const hasAuth = Boolean(authParam || c.env.AUTH_TOKEN || c.env.AUTH_USER);
+    const hasAuth = Boolean(authParam || c.env?.AUTH_TOKEN || c.env?.AUTH_USER);
     const cacheHeader = hasAuth
       ? 'private, no-cache, no-store, must-revalidate'
       : 'public, max-age=60, s-maxage=60';
@@ -196,6 +206,20 @@ app.get('/feed/:folderId', async (c) => {
         404
       );
     }
+    if (
+      msg.includes('429') ||
+      msg.includes('rateLimitExceeded') ||
+      msg.includes('userRateLimitExceeded') ||
+      msg.includes('quotaExceeded')
+    ) {
+      return c.text(
+        'Lỗi: Đã vượt quá hạn mức truy vấn Google Drive API (429 Too Many Requests).\n\nVui lòng chờ 1-2 phút rồi thử lại, hoặc cấu hình Google Drive API Key riêng trên ứng dụng vBook.',
+        429,
+        {
+          'Retry-After': '60',
+        }
+      );
+    }
     return c.text('Lỗi xử lý thư mục Google Drive. Vui lòng kiểm tra quyền chia sẻ và API Key.', 500);
   }
 });
@@ -210,6 +234,9 @@ app.get('/feed/:folderId/opensearch.xml', async (c) => {
   let realFolderId: string | null = null;
 
   if (isMaskedId(rawFolderId)) {
+    if (!secret) {
+      return c.text('Lỗi cấu hình máy chủ: Thiếu MASK_SECRET để giải mã danh mục sách', 500);
+    }
     realFolderId = await unmaskFolderId(rawFolderId, secret);
     if (!realFolderId) {
       return c.text('Đường dẫn danh mục không hợp lệ hoặc đã bị thay đổi', 400);
@@ -239,6 +266,9 @@ app.get('/feed/:folderId/search', async (c) => {
   let isMasked = false;
 
   if (isMaskedId(rawFolderId)) {
+    if (!secret) {
+      return c.text('Lỗi cấu hình máy chủ: Thiếu MASK_SECRET để giải mã danh mục sách', 500);
+    }
     realFolderId = await unmaskFolderId(rawFolderId, secret);
     isMasked = true;
     if (!realFolderId) {
@@ -257,14 +287,14 @@ app.get('/feed/:folderId/search', async (c) => {
     });
   }
 
-  const apiKey = c.req.query('key') || c.env.GOOGLE_API_KEY;
+  const apiKey = c.req.query('key') || c.env?.GOOGLE_API_KEY;
   if (!apiKey) {
     return c.text('Lỗi: Chưa cung cấp Google Drive API Key', 400);
   }
 
   const searchTerm = (c.req.query('q') || '').trim();
   const pageToken = c.req.query('page');
-  const pageSize = parseInt(c.env.DEFAULT_PAGE_SIZE || '50', 10);
+  const pageSize = parseInt(c.env?.DEFAULT_PAGE_SIZE || '50', 10);
   const authParam = c.req.query('auth');
 
   try {
@@ -285,7 +315,7 @@ app.get('/feed/:folderId/search', async (c) => {
 
     // Nếu đang ở chế độ ẩn ID: Mã hóa các thư mục con trong kết quả tìm kiếm
     let subfolderIdMap: Record<string, string> | undefined = undefined;
-    if (isMasked) {
+    if (isMasked && secret) {
       subfolderIdMap = {};
       for (const item of driveData.items) {
         if (item.isFolder) {
@@ -338,6 +368,21 @@ app.get('/feed/:folderId/search', async (c) => {
     });
   } catch (error: any) {
     console.error('Lỗi tìm kiếm Drive:', error);
+    const msg = error.message || '';
+    if (
+      msg.includes('429') ||
+      msg.includes('rateLimitExceeded') ||
+      msg.includes('userRateLimitExceeded') ||
+      msg.includes('quotaExceeded')
+    ) {
+      return c.text(
+        'Lỗi: Đã vượt quá hạn mức truy vấn Google Drive API (429 Too Many Requests).\n\nVui lòng chờ 1-2 phút rồi thử lại, hoặc cấu hình Google Drive API Key riêng trên ứng dụng vBook.',
+        429,
+        {
+          'Retry-After': '60',
+        }
+      );
+    }
     return c.text('Lỗi tìm kiếm trong thư mục Google Drive.', 500);
   }
 });
@@ -361,8 +406,8 @@ app.get('/download/:fileId', (c) => {
     });
   }
 
-  // Link download trực tiếp từ Google Drive (không phơi API key)
-  const googleDownloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+  // Link download trực tiếp từ Google Drive (thêm confirm=t để bypass cảnh báo virus file dung lượng lớn >25MB)
+  const googleDownloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}&confirm=t`;
   return c.redirect(googleDownloadUrl, 302);
 });
 

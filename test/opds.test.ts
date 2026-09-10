@@ -3,6 +3,7 @@ import { buildOpdsFeed, buildOpenSearchDescription, cleanBookTitle } from '../sr
 import { buildOpds2Feed } from '../src/opds2';
 import { verifyBasicAuth, createAuthToken, parseBasicAuthHeader } from '../src/auth';
 import { maskFolderId, unmaskFolderId, isMaskedId } from '../src/crypto';
+import app from '../src/index';
 
 function assert(condition: boolean, msg: string) {
   if (!condition) {
@@ -346,8 +347,57 @@ assert(pub.links[0].href.includes('download/book_opds2_1'), 'Acquisition downloa
 assert(pub.images.length === 1 && pub.images[0].href === 'https://lh3.googleusercontent.com/thumb_opds2', 'Publication thumbnail image');
 console.log('✓ Passed 9. OPDS 2.0 JSON Builder Contract (application/opds+json)');
 
+console.log('--- 10. Kiểm tra Worker Server Download Bypass & Hardening ---');
+const dlRes = await app.request('/download/test_file_id_12345');
+assert(dlRes.status === 302, 'Download endpoint trả về mã HTTP 302 Redirect');
+assert(
+  dlRes.headers.get('Location') ===
+    'https://drive.google.com/uc?export=download&id=test_file_id_12345&confirm=t',
+  'Download redirect chứa confirm=t để bypass cảnh báo file lớn của Google Drive'
+);
+
+const invalidDlRes = await app.request('/download/bad/../id');
+assert(invalidDlRes.status === 400, 'Chặn fileId không hợp lệ chống Injection');
+
+// Kiểm tra bảo mật: Tuyệt đối không hardcode fallback MASK_SECRET
+const maskWithoutSecretRes = await app.request('/api/mask', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ folderId: '1234567890abcdef' }),
+});
+assert(
+  maskWithoutSecretRes.status === 500,
+  'Chặn /api/mask khi server chưa cấu hình MASK_SECRET'
+);
+
+const maskWithSecretRes = await app.request(
+  '/api/mask',
+  {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ folderId: '1234567890abcdef' }),
+  },
+  {
+    MASK_SECRET: 'super-secret-key-32-chars-long!!',
+  }
+);
+assert(maskWithSecretRes.status === 200, '/api/mask thành công khi có MASK_SECRET');
+const maskData = await maskWithSecretRes.json();
+assert(
+  typeof maskData.maskedId === 'string' && maskData.maskedId.startsWith('m_'),
+  '/api/mask sinh ID ẩn danh tiền tố m_'
+);
+
+const feedWithoutSecretRes = await app.request('/feed/m_AbCdEf123456');
+assert(
+  feedWithoutSecretRes.status === 500,
+  'Chặn truy cập feed ẩn danh nếu server thiếu MASK_SECRET'
+);
+
+console.log('✓ Passed 10. Worker Server Download Bypass & Hardening (Zero Hardcoded Secret)');
+
   console.log('\n=========================================');
-  console.log('TẤT CẢ 9 BỘ KIỂM THỬ ĐỀU ĐẠT CHUẨN 100%!');
+  console.log('TẤT CẢ 10 BỘ KIỂM THỬ ĐỀU ĐẠT CHUẨN 100%!');
   console.log('=========================================');
 }
 
