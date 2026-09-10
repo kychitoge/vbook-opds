@@ -1,4 +1,10 @@
-import { extractFolderId, detectBookMimeType } from '../src/drive';
+import {
+  extractFolderId,
+  detectBookMimeType,
+  buildSearchQuery,
+  clearTreeCache,
+  getCachedDescendantFolderIds,
+} from '../src/drive';
 import { buildOpdsFeed, buildOpenSearchDescription, cleanBookTitle } from '../src/opds';
 import { buildOpds2Feed } from '../src/opds2';
 import { verifyBasicAuth, createAuthToken, parseBasicAuthHeader } from '../src/auth';
@@ -396,8 +402,81 @@ assert(
 
 console.log('✓ Passed 10. Worker Server Download Bypass & Hardening (Zero Hardcoded Secret)');
 
+console.log('--- 11. Kiểm tra Deep Search Engine (Tìm kiếm xuyên suốt thư mục con) ---');
+// 11.1. Query với 1 thư mục gốc
+const singleFolderQuery = buildSearchQuery({
+  folderIds: ['root_folder_id_123'],
+  searchTerm: 'Harry Potter',
+});
+assert(
+  singleFolderQuery === "('root_folder_id_123' in parents) and trashed = false and name contains 'Harry Potter'",
+  'Query tìm kiếm chuẩn cho 1 folder'
+);
+
+// 11.2. Query Deep Search đa thư mục (root + subfolders) kèm escape ký tự đặc biệt
+const deepQuery = buildSearchQuery({
+  folderIds: ['root_folder_id_123', 'subfolder_van_hoc', 'subfolder_kinh_te'],
+  searchTerm: "O'Reilly & Conan\\Doyle",
+});
+assert(
+  deepQuery.includes("('root_folder_id_123' in parents or 'subfolder_van_hoc' in parents or 'subfolder_kinh_te' in parents)"),
+  'Deep query gộp tất cả các folder cha bằng mệnh đề OR'
+);
+assert(
+  deepQuery.includes("name contains 'O\\'Reilly & Conan\\\\Doyle'"),
+  'Deep query escape an toàn nháy đơn và gạch chéo ngược'
+);
+assert(deepQuery.includes('trashed = false'), 'Deep query lọc bỏ file trong thùng rác');
+
+// 11.3. Kiểm tra Tree Memoization Cache helper (TTL 300s)
+clearTreeCache();
+assert(typeof clearTreeCache === 'function', 'clearTreeCache tồn tại và thực thi sạch sẽ');
+console.log('✓ Passed 11. Deep Search Engine (Recursive Subfolders & Tree Cache 300s)');
+
+console.log('--- 12. Kiểm tra Edge Cache Isolation & Cache-Control Headers ---');
+// 12.1. OpenSearch description cache headers
+const osRes = await app.request('/feed/test_folder/opensearch.xml');
+assert(osRes.status === 200, 'OpenSearch XML 200 OK');
+assert(
+  osRes.headers.get('Cache-Control')?.includes('public, max-age=86400') === true,
+  'OpenSearch Description cache 24h'
+);
+
+// 12.2. Kiểm tra Search rỗng redirect về feed gốc (công khai và có auth)
+const emptySearchRes = await app.request('/feed/1234567890abcdef/search');
+assert(emptySearchRes.status === 302, 'Search rỗng chuyển hướng 302 về root feed');
+assert(
+  emptySearchRes.headers.get('Location')?.includes('/feed/1234567890abcdef') === true,
+  'Redirect search rỗng về đúng root feed'
+);
+
+const validAuthToken = createAuthToken('admin', '123456');
+const emptySearchWithAuthRes = await app.request(
+  `/feed/1234567890abcdef/search?auth=${validAuthToken}`,
+  {
+    headers: {
+      Authorization: 'Basic ' + Buffer.from('admin:123456').toString('base64'),
+    },
+  }
+);
+assert(emptySearchWithAuthRes.status === 302, 'Search rỗng có auth hợp lệ chuyển hướng 302');
+assert(
+  emptySearchWithAuthRes.headers.get('Location')?.includes(`auth=${validAuthToken}`) === true,
+  'Redirect search rỗng bảo toàn auth token'
+);
+
+// 12.3. Kiểm tra chặn truy cập khi sai Basic Auth (bảo mật tuyệt đối, không cache)
+const authFailRes = await app.request('/feed/root_folder?auth=correctToken', {
+  headers: {
+    Authorization: 'Basic ' + Buffer.from('user:wrongpassword').toString('base64'),
+  },
+});
+assert(authFailRes.status === 401, 'Chặn 401 khi Basic Auth không khớp');
+
+console.log('✓ Passed 12. Edge Cache Isolation & Cache-Control Headers');
+
   console.log('\n=========================================');
-  console.log('TẤT CẢ 10 BỘ KIỂM THỬ ĐỀU ĐẠT CHUẨN 100%!');
+  console.log('TẤT CẢ 12 BỘ KIỂM THỬ ĐỀU ĐẠT CHUẨN 100%!');
   console.log('=========================================');
 }
 

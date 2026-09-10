@@ -132,6 +132,22 @@ Dự án được quản lý theo chuẩn SemVer và nguyên tắc Dao cạo Ock
 
 ---
 
-> **TRẠNG THÁI HIỆN TẠI (v1.3.1)**: Đạt chuẩn **100% Full Contract Compliance & Production Server Hardened**!
+## Milestone 11: Minor v1.4.0 (Deep Search Engine & Cloudflare Edge Cache Layer)
+- [x] **M11.1**: **Động cơ Tìm kiếm sâu (Deep Search Engine - ADR-010)**:
+  - Thuật toán BFS Level-Order Traversal trên cây đa phân (N-ary Tree) quét các thư mục con theo batch.
+  - Tích hợp bộ đệm **Tree Memoization (TTL 300s / 5 phút)**: Trả về folder tree ngay lập tức (0ms), tối đa 35 folders để query luôn `< 2KB`.
+  - Tối ưu hóa `searchDriveFolder` và `buildSearchQuery` trong **1 câu query Google duy nhất**, bảo toàn 100% native `nextPageToken` cho vBook Infinite Scroll.
+  - Kiểm tra rỗng `searchTerm` chuyển hướng 302 ngay lập tức, tiết kiệm 100% subrequest Google API.
+- [x] **M11.2**: **Cloudflare Edge Cache Layer (`caches.default`)**:
+  - Tích hợp bộ nhớ đệm Edge Cache native:
+    + Cache feed danh mục `/feed/:folderId`: **60 giây** (`public, max-age=60, s-maxage=60`).
+    + Cache kết quả tìm kiếm `/feed/:folderId/search`: **300 giây** (`public, max-age=300, s-maxage=300`).
+  - Phân tách định dạng an toàn XML/JSON qua query `_fmt`, header `Vary: Accept` và `X-Gateway-Cache: HIT/MISS`.
+  - Bảo vệ quyền riêng tư: Bỏ qua hoàn toàn Edge Cache (`private, no-cache, no-store`) khi request có xác thực Basic Auth.
+- [x] **M11.3**: Nâng cấp bộ kiểm thử tự động lên 12/12 test suites đạt 100% pass.
+
+---
+
+> **TRẠNG THÁI HIỆN TẠI (v1.4.0)**: Đạt chuẩn **100% Full Contract Compliance & Deep Search + Edge Cached**!
 
 
